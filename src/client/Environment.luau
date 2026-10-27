@@ -64,7 +64,7 @@ local npcs: { Npc } = {}
 
 -- other players' clap animation state (character -> last clap time)
 local armClaps: { [Model]: number } = {}
-local originalC0: { [Motor6D]: CFrame } = {}
+local originalC0: { [Instance]: CFrame } = {} -- resting shoulder offsets (Motor6D or Attachment)
 local lastPulseFx: { [number]: number } = {}
 
 local SKIN_TONES = { Color3.fromRGB(234, 192, 160), Color3.fromRGB(222, 176, 140), Color3.fromRGB(240, 205, 175) }
@@ -516,26 +516,55 @@ end
 ----------------------------------------------------------------------------------------------------
 -- character arm clapping (other players, and me on top-down stages)
 
-local function shoulders(character: Model): (Motor6D?, Motor6D?)
-	local r = character:FindFirstChild("RightShoulder", true) or character:FindFirstChild("Right Shoulder", true)
-	local l = character:FindFirstChild("LeftShoulder", true) or character:FindFirstChild("Left Shoulder", true)
-	return (if r and r:IsA("Motor6D") then r else nil), (if l and l:IsA("Motor6D") then l else nil)
+-- The shoulder joint's torso-side offset: Motor6D.C0 on classic rigs, or the torso attachment
+-- (Attachment0) of an AnimationConstraint on newer avatars. Rotating it swings the whole arm.
+type ShoulderJoint = { get: () -> CFrame, set: (CFrame) -> (), key: Instance }
+
+local function shoulderJoint(character: Model, names: { string }): ShoulderJoint?
+	for _, name in names do
+		local joint = character:FindFirstChild(name, true)
+		if joint and joint:IsA("Motor6D") then
+			local motor = joint
+			return {
+				key = motor,
+				get = function()
+					return motor.C0
+				end,
+				set = function(cf)
+					motor.C0 = cf
+				end,
+			}
+		elseif joint and joint:IsA("AnimationConstraint") and joint.Attachment0 then
+			local attachment = joint.Attachment0 :: Attachment
+			return {
+				key = attachment,
+				get = function()
+					return attachment.CFrame
+				end,
+				set = function(cf)
+					attachment.CFrame = cf
+				end,
+			}
+		end
+	end
+	return nil
 end
 
 local function poseCharacter(character: Model, closeness: number, active: number)
-	local r, l = shoulders(character)
-	for side, motor in { [1] = r, [-1] = l } do
-		if motor then
-			local orig = originalC0[motor]
+	local r = shoulderJoint(character, { "RightShoulder", "Right Shoulder" })
+	local l = shoulderJoint(character, { "LeftShoulder", "Left Shoulder" })
+	for side, joint in { [1] = r, [-1] = l } do
+		if joint then
+			local orig = originalC0[joint.key]
 			if not orig then
-				orig = motor.C0
-				originalC0[motor] = orig
+				orig = joint.get()
+				originalC0[joint.key] = orig
 			end
 			if active <= 0 then
-				motor.C0 = orig
+				joint.set(orig)
 			else
 				local inward = math.rad(15 + 20 * closeness) * side
-				motor.C0 = orig * CFrame.Angles(0, inward * active, 0) * CFrame.Angles(math.rad(85) * active, 0, 0)
+				joint.set(orig * CFrame.Angles(0, inward * active, 0) * CFrame.Angles(math.rad(85) * active, 0, 0))
 			end
 		end
 	end

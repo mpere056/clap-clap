@@ -29,6 +29,10 @@ Config.Tuning = {
 	InSyncMinPlayers = 2,
 	InSyncBonus = 1.5,
 
+	-- Graduate (prestige): available once you've maxed out this stage
+	GraduateStage = 3,
+	DiplomaBonus = 0.1, -- each Diploma: +10% clap power, forever
+
 	StrongHandsBaseCost = 15,
 	StrongHandsGrowth = 1.15,
 	ClassmateGrowth = 1.12,

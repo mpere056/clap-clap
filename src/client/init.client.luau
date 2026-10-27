@@ -25,6 +25,7 @@ local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local clapRemote = remotes:WaitForChild("ClapBatch") :: RemoteEvent
 local purchaseRemote = remotes:WaitForChild("Purchase") :: RemoteFunction
+local graduateRemote = remotes:WaitForChild("Graduate") :: RemoteFunction
 local stateRemote = remotes:WaitForChild("State") :: RemoteEvent
 local broadcastRemote = remotes:WaitForChild("Broadcast") :: RemoteEvent
 local pulseRemote = remotes:WaitForChild("ClapPulse") :: UnreliableRemoteEvent
@@ -39,12 +40,20 @@ local lastPerfectBeat = -1
 local lastClapAt = 0
 local localClapCount = 0
 local localCombo = 1
+local lastGraduations = -1
 
 ----------------------------------------------------------------------------------------------------
 -- setup
 
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+end)
+-- chat lives bottom-left so it doesn't cover the clap counter
+pcall(function()
+	local chatWindow = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
+	if chatWindow then
+		chatWindow.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	end
 end)
 task.spawn(function()
 	local ok, playerModule = pcall(function()
@@ -65,6 +74,13 @@ HUD.init(function(kind, id, amount)
 		local ok, result = purchaseRemote:InvokeServer(kind, id, amount)
 		if not ok and result then
 			HUD.toast(tostring(result), Color3.fromRGB(255, 170, 170), 1.5)
+		end
+	end)
+end, function()
+	task.spawn(function()
+		local ok, result = graduateRemote:InvokeServer()
+		if not ok and result then
+			HUD.toast(tostring(result), Color3.fromRGB(255, 170, 170), 2)
 		end
 	end)
 end)
@@ -157,6 +173,11 @@ end)
 
 stateRemote.OnClientEvent:Connect(function(snapshot)
 	Store.set(snapshot)
+	if snapshot.graduations ~= lastGraduations then
+		-- a new run: the clap counter starts again
+		lastGraduations = snapshot.graduations
+		localClapCount = snapshot.runClaps
+	end
 	localClapCount = math.max(localClapCount, snapshot.runClaps)
 	localCombo = snapshot.combo or 1
 	Environment.setHired(Formulas.totalClassmates(snapshot))
@@ -193,8 +214,41 @@ local function playBreakthrough(toStage: number)
 	inCinematic = false
 end
 
+-- back to the ceremony after graduating
+local function playGraduation(gained: number, total: number)
+	inCinematic = true
+	HUD.lockCaption(true)
+	HUD.setCaption("You graduated. Then you sat back down.", "卒業おめでとう")
+	Audio.breakthrough()
+	CameraRig.breakthrough()
+	task.wait(0.5)
+	HUD.whiteOut(0.8)
+	task.wait(0.9)
+	local origin = Config.getStage(1).origin
+	local deadline = os.clock() + 5
+	while os.clock() < deadline do
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root and (root.Position - origin).Magnitude < 1500 then
+			break
+		end
+		task.wait(0.1)
+	end
+	applyStage(1)
+	CameraRig.endTransition()
+	HUD.flash(0.15)
+	HUD.toast(string.format("🎓 +%d Diplomas · %d total · +%d%% clap power", gained, total, math.floor(total * T.DiplomaBonus * 100 + 0.5)), Color3.fromRGB(255, 150, 175), 5)
+	HUD.lockCaption(false)
+	inCinematic = false
+end
+
 broadcastRemote.OnClientEvent:Connect(function(kind: string, data: any)
-	if kind == "Breakthrough" then
+	if kind == "Graduated" then
+		if data.userId == player.UserId then
+			task.spawn(playGraduation, data.gained, data.total)
+		else
+			HUD.toast(string.format("🎓 %s graduated with %d Diplomas!", data.name, data.gained), Color3.fromRGB(255, 150, 175))
+		end
+	elseif kind == "Breakthrough" then
 		if data.userId == player.UserId then
 			task.spawn(playBreakthrough, data.to)
 		else

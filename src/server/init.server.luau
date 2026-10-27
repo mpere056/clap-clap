@@ -20,6 +20,7 @@ local function remote(className: string, name: string)
 end
 remote("RemoteEvent", "ClapBatch")
 remote("RemoteFunction", "Purchase")
+remote("RemoteFunction", "Graduate")
 remote("RemoteEvent", "State")
 remote("RemoteEvent", "Broadcast")
 remote("UnreliableRemoteEvent", "ClapPulse")

@@ -18,6 +18,9 @@ export type PlayerState = {
 	totalClaps: number,
 	runClaps: number,
 	frenzy: number,
+	peakPower: number, -- best log10 effective clap power this run
+	diplomas: number,
+	graduations: number,
 }
 
 function Formulas.newState(): PlayerState
@@ -31,12 +34,15 @@ function Formulas.newState(): PlayerState
 		totalClaps = 0,
 		runClaps = 0,
 		frenzy = 0,
+		peakPower = 0,
+		diplomas = 0,
+		graduations = 0,
 	}
 end
 
 -- log10 of Clap Power
 function Formulas.clapPower(state: PlayerState): number
-	local base = math.log10(1 + state.strongHands)
+	local base = math.log10(1 + state.strongHands) + math.log10(1 + T.DiplomaBonus * state.diplomas)
 	for _, tech in Config.Techniques do
 		if state.techniques[tech.id] then
 			base += math.log10(tech.mult)
@@ -98,6 +104,20 @@ function Formulas.displayValue(stageId: number, t: number): number
 	end
 	local a, b = math.log10(d.from), math.log10(d.to)
 	return 10 ^ (a + (b - a) * t)
+end
+
+-- Graduate once the run has pushed past the end of the graduation stage
+function Formulas.canGraduate(state: PlayerState): boolean
+	return state.stage >= T.GraduateStage and state.peakPower >= Config.getStage(T.GraduateStage).threshold
+end
+
+-- Diplomas grow with how far past the graduation threshold the run got
+function Formulas.diplomasFor(state: PlayerState): number
+	local over = state.peakPower - Config.getStage(T.GraduateStage).threshold
+	if over < 0 then
+		return 0
+	end
+	return math.floor(3 * (over + 1) ^ 1.5)
 end
 
 function Formulas.frenzyMultiplier(chainIndex: number): number

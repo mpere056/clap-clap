@@ -32,6 +32,7 @@ local gui: ScreenGui
 local refs: { [string]: any } = {}
 local lastCaptionKey = ""
 local onBuy: ((string, string?, any) -> ())? = nil
+local onGraduate: (() -> ())? = nil
 local shopOpen = false
 local predictedClaps = 0
 local captionLocked = false
@@ -171,8 +172,9 @@ end
 local function buildOvation(parent: Instance)
 	local frame = create("Frame", {
 		Name = "Ovation",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -22, 0, 64),
+		-- top centre, under Applause: the top-right corner belongs to Roblox's player list
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 126),
 		Size = UDim2.new(0, 220, 0, 52),
 		BackgroundColor3 = Color3.new(0, 0, 0),
 		BackgroundTransparency = 0.55,
@@ -262,7 +264,7 @@ local function buildToasts(parent: Instance)
 	local list = create("Frame", {
 		Name = "Toasts",
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 130),
+		Position = UDim2.new(0.5, 0, 0.38, 0),
 		Size = UDim2.new(0, 520, 0, 200),
 		BackgroundTransparency = 1,
 		Parent = parent,
@@ -337,6 +339,7 @@ local function buildShop(parent: Instance)
 		Size = UDim2.new(0, 400, 0.62, 0),
 		BackgroundColor3 = PANEL,
 		BackgroundTransparency = 0.08,
+		Active = true, -- sink clicks so they don't count as claps
 		Visible = false,
 		Parent = parent,
 	}, { corner(14), stroke(0.85) })
@@ -431,10 +434,89 @@ local function refreshShop()
 end
 
 ----------------------------------------------------------------------------------------------------
+-- graduate (prestige)
+
+local function buildGraduate(parent: Instance)
+	local graduate = button({
+		Name = "Graduate",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 186),
+		Size = UDim2.new(0, 220, 0, 46),
+		BackgroundColor3 = Color3.fromRGB(255, 120, 150),
+		TextColor3 = Color3.fromRGB(40, 16, 24),
+		TextSize = 17,
+		Text = "🎓 Graduate 卒業",
+		Visible = false,
+		Parent = parent,
+	})
+	refs.graduate = graduate
+
+	local dialog = create("Frame", {
+		Name = "GraduateDialog",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.new(0.9, 0, 0, 250),
+		BackgroundColor3 = PANEL,
+		BackgroundTransparency = 0.04,
+		Active = true, -- sink clicks so they don't count as claps
+		Visible = false,
+		ZIndex = 20,
+		Parent = parent,
+	}, { corner(16), stroke(0.8), create("UISizeConstraint", { MaxSize = Vector2.new(420, 250) }) })
+	text({ Position = UDim2.new(0, 22, 0, 18), Size = UDim2.new(1, -44, 0, 34), FontFace = SERIF, TextSize = 28, Text = "Graduate? 卒業", ZIndex = 21, Parent = dialog })
+	refs.graduateBody = text({
+		Position = UDim2.new(0, 22, 0, 60),
+		Size = UDim2.new(1, -44, 0, 110),
+		TextSize = 16,
+		FontFace = SANS_MED,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Text = "",
+		ZIndex = 21,
+		Parent = dialog,
+	})
+	local confirm = button({
+		Name = "Confirm",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -22, 1, -18),
+		Size = UDim2.new(0, 170, 0, 44),
+		BackgroundColor3 = Color3.fromRGB(255, 120, 150),
+		TextColor3 = Color3.fromRGB(40, 16, 24),
+		TextSize = 18,
+		Text = "Graduate",
+		ZIndex = 21,
+		Parent = dialog,
+	})
+	local cancel = button({
+		Name = "Cancel",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 22, 1, -18),
+		Size = UDim2.new(0, 140, 0, 44),
+		Text = "Not yet",
+		ZIndex = 21,
+		Parent = dialog,
+	})
+	graduate.Activated:Connect(function()
+		dialog.Visible = true
+	end)
+	cancel.Activated:Connect(function()
+		dialog.Visible = false
+	end)
+	confirm.Activated:Connect(function()
+		dialog.Visible = false
+		if onGraduate then
+			onGraduate()
+		end
+	end)
+	refs.graduateDialog = dialog
+end
+
+----------------------------------------------------------------------------------------------------
 -- public API
 
-function HUD.init(buyHandler: (string, string?, any) -> ())
+function HUD.init(buyHandler: (string, string?, any) -> (), graduateHandler: () -> ())
 	onBuy = buyHandler
+	onGraduate = graduateHandler
 	gui = create("ScreenGui", {
 		Name = "ClapHUD",
 		ResetOnSpawn = false,
@@ -449,6 +531,7 @@ function HUD.init(buyHandler: (string, string?, any) -> ())
 	buildCenter(safe)
 	buildToasts(safe)
 	buildShop(safe)
+	buildGraduate(safe)
 
 	-- beat ring animation
 	RunService.RenderStepped:Connect(function()
@@ -532,11 +615,29 @@ function HUD.update(t: number, stageId: number)
 
 	refs.applause.Text = "👏 " .. Format.short(s.applause)
 	local auto = Formulas.autoClapsPerSecond(s :: any)
-	if auto > 0 then
-		local perSecond = s.clapPower + math.log10(auto * T.AutoEfficiency)
-		refs.rate.Text = string.format("Classmates: +%s/s · Power %s", Format.short(perSecond), Format.short(s.clapPower))
-	else
-		refs.rate.Text = string.format("Clap power %s", Format.short(s.clapPower))
+	local rate = if auto > 0
+		then string.format("Classmates: +%s/s · Power %s", Format.short(s.clapPower + math.log10(auto * T.AutoEfficiency)), Format.short(s.clapPower))
+		else string.format("Clap power %s", Format.short(s.clapPower))
+	local diplomas = s.diplomas or 0
+	if diplomas > 0 then
+		rate ..= string.format(" · 🎓 %d (+%d%%)", diplomas, math.floor(diplomas * T.DiplomaBonus * 100 + 0.5))
+	end
+	refs.rate.Text = rate
+
+	local canGraduate = s.canGraduate == true and stageId == s.stage
+	refs.graduate.Visible = canGraduate
+	if canGraduate then
+		local gained = s.diplomasOnGraduate or 0
+		local after = (diplomas + gained) * T.DiplomaBonus * 100
+		refs.graduate.Text = string.format("🎓 Graduate 卒業  +%d", gained)
+		refs.graduateBody.Text = string.format(
+			"Start over from the ceremony with <font color=\"#E8B866\">+%d Diplomas</font>.\n\nYou'll have %d Diplomas: <b>+%d%% clap power forever</b>.\nApplause, upgrades and classmates reset. Keep clapping longer before graduating to earn more.",
+			gained,
+			diplomas + gained,
+			math.floor(after + 0.5)
+		)
+	elseif refs.graduateDialog.Visible then
+		refs.graduateDialog.Visible = false
 	end
 
 	local combo = s.combo or 1
@@ -555,6 +656,8 @@ function HUD.update(t: number, stageId: number)
 
 	if captionLocked then
 		-- a cinematic owns the caption
+	elseif canGraduate then
+		HUD.setCaption("You've outgrown this school. Time to graduate.", "卒業おめでとう")
 	elseif capped and t >= 1 then
 		HUD.setCaption("This is as far as the stage goes (for now). Keep clapping!")
 	else

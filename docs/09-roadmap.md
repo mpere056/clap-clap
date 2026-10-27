@@ -15,6 +15,8 @@
 Built and tested in Studio: all items below except saving (needs the place published) and a real multi-client test of Ovation / In Sync (code paths smoke-tested solo).
 Known rough edges: blocky placeholder hands, Creator Store placeholder audio, no shopping-arcade cut, no "street cut".
 
+**Launch must-fixes (2026-10-27):** streaming turned off; session-locked saving; Graduate (prestige) available at the end of stage 3 for now (`Tuning.GraduateStage`, move to 9 when later stages exist). Still needed: publish + Max Players 20 + Studio API access, a 2-player test, the Maturity & Compliance questionnaire and store page.
+
 **Goal:** someone plays for 10–15 minutes and wants to keep clapping.
 
 Scope:

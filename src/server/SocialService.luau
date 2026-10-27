@@ -111,6 +111,17 @@ function SocialService.init(remoteFolder: Folder)
 	remotes = remoteFolder
 	publishOvation()
 
+	-- Studio-only test hook: ServerStorage.DevOvation:Invoke()
+	if game:GetService("RunService"):IsStudio() then
+		local trigger = Instance.new("BindableFunction")
+		trigger.Name = "DevOvation"
+		trigger.OnInvoke = function()
+			SocialService.startOvation(nil)
+			return true
+		end
+		trigger.Parent = game:GetService("ServerStorage")
+	end
+
 	Players.PlayerAdded:Connect(publishOvation)
 	Players.PlayerRemoving:Connect(function(player)
 		inSyncUntil[player] = nil

@@ -52,6 +52,10 @@ local function snapshot(rt: Runtime): { [string]: any }
 		frenzyChain = rt.frenzyChain,
 		combo = rt.combo,
 		capped = s.stage >= Config.lastBuiltStage(),
+		diplomas = s.diplomas,
+		graduations = s.graduations,
+		canGraduate = Formulas.canGraduate(s),
+		diplomasOnGraduate = Formulas.diplomasFor(s),
 	}
 end
 
@@ -150,6 +154,7 @@ local function onClapBatch(player: Player, count: any, perfectBeats: any)
 	end
 
 	s.applause = Num.add(s.applause, earned)
+	s.peakPower = math.max(s.peakPower, cp + math.log10(rt.combo))
 	s.runClaps += claps
 	s.totalClaps += claps
 	rt.dirty = true
@@ -232,8 +237,50 @@ local function onPurchase(player: Player, kind: any, id: any, amount: any): (boo
 	return false, lastErr
 end
 
+local function onGraduate(player: Player): (boolean, string?)
+	local rt = runtimes[player]
+	if not rt then
+		return false, "Not ready"
+	end
+	local s = rt.state
+	if not Formulas.canGraduate(s) then
+		return false, "Finish stage " .. T.GraduateStage .. " first"
+	end
+	local gained = Formulas.diplomasFor(s)
+	local fresh = Formulas.newState()
+	s.applause = fresh.applause
+	s.strongHands = fresh.strongHands
+	s.techniques = fresh.techniques
+	s.classmates = fresh.classmates
+	s.stage = 1
+	s.runClaps = 0
+	s.frenzy = 0
+	s.peakPower = 0
+	s.diplomas += gained
+	s.graduations += 1
+	rt.combo = 1
+	rt.frenzyChain = 0
+	rt.dirty = true
+	SocialService.broadcast("Graduated", {
+		userId = player.UserId,
+		name = player.DisplayName,
+		gained = gained,
+		total = s.diplomas,
+	})
+	task.delay(1.2, function()
+		if player.Parent then
+			WorldService.place(player, 1)
+		end
+	end)
+	return true, tostring(gained)
+end
+
 local function onPlayerAdded(player: Player)
 	local state = DataService.load(player)
+	if not state then
+		player:Kick("We couldn't load your progress safely. Please rejoin in a moment.")
+		return
+	end
 	-- older saves may reference stages that are no longer built
 	state.stage = math.clamp(state.stage, 1, Config.lastBuiltStage())
 	local now = os.clock()
@@ -260,7 +307,8 @@ end
 function GameService.init(remoteFolder: Folder)
 	remotes = remoteFolder;
 	(remotes.ClapBatch :: RemoteEvent).OnServerEvent:Connect(onClapBatch);
-	(remotes.Purchase :: RemoteFunction).OnServerInvoke = onPurchase
+	(remotes.Purchase :: RemoteFunction).OnServerInvoke = onPurchase;
+	(remotes.Graduate :: RemoteFunction).OnServerInvoke = onGraduate
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	for _, player in Players:GetPlayers() do

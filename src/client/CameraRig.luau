@@ -47,12 +47,22 @@ local function targetCFrame(): CFrame?
 		local eye = if seat then seat.Position + Vector3.new(0, 4.4, 0) else pos + Vector3.new(0, 1.6, 0)
 		-- look at the stage, but mostly straight ahead so side seats don't feel skewed
 		local look = if target then Vector3.new(eye.X * 0.65 + target.Position.X * 0.35, target.Position.Y, target.Position.Z) else eye + Vector3.new(0, 0, -50)
-		-- subtle mouse parallax so the view feels alive
-		local mouse = UserInputService:GetMouseLocation()
-		local viewport = (workspace.CurrentCamera :: Camera).ViewportSize
-		local mx = math.clamp((mouse.X / math.max(1, viewport.X) - 0.5) * 2, -1, 1)
-		local my = math.clamp((mouse.Y / math.max(1, viewport.Y) - 0.5) * 2, -1, 1)
-		return CFrame.lookAt(eye, look) * CFrame.Angles(math.rad(-my * 3), math.rad(-mx * 5), 0)
+		-- look around with the mouse (towards the screen edges) to see the classmates beside you
+		local yaw, pitch = 0, 0
+		if UserInputService.MouseEnabled then
+			local mouse = UserInputService:GetMouseLocation()
+			local viewport = (workspace.CurrentCamera :: Camera).ViewportSize
+			local mx = math.clamp((mouse.X / math.max(1, viewport.X) - 0.5) * 2, -1, 1)
+			local my = math.clamp((mouse.Y / math.max(1, viewport.Y) - 0.5) * 2, -1, 1)
+			-- ease in so small mouse moves near the centre barely turn the head
+			yaw = -math.sign(mx) * math.abs(mx) ^ 1.6 * 32
+			pitch = -my * 8
+		end
+		-- turn around the world up axis, then tilt, so the horizon never rolls
+		local dir = (look - eye).Unit
+		local baseYaw = math.atan2(-dir.X, -dir.Z)
+		local basePitch = math.asin(math.clamp(dir.Y, -1, 1))
+		return CFrame.new(eye) * CFrame.Angles(0, baseYaw + math.rad(yaw), 0) * CFrame.Angles(basePitch + math.rad(pitch), 0, 0)
 	elseif stageId == 2 then
 		local height = 16 + 34 * progress
 		return CFrame.lookAt(pos + Vector3.new(0, height, 0.01), pos) * CFrame.Angles(0, 0, 0)
