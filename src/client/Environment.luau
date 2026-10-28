@@ -265,6 +265,9 @@ end
 
 -- how an item answers a shove: its own kind, or a React attribute (a flattening tower that also sways)
 local function reaction(item: Item): string
+	if item.data.Thrown then
+		return "Fly" -- an uprooted tree or toppled tower flies like anything else until it's back
+	end
 	return (item.data.React :: string?) or item.kind
 end
 
@@ -462,17 +465,24 @@ local function shoveItems(origin: Vector3, force: number, now: number): number
 			item.kick = math.max(item.kick, math.min(1, excess * 2)) -- lava cracks flare up
 		elseif item.kind == "Swing" then
 			item.kick = math.min(0.7, item.kick + excess * 0.4)
-		elseif reaction(item) == "Bend" then
-			-- trees, lamp posts and towers bend away and spring back
-			item.dang += Vector3.new(dir.Z, 0, -dir.X) * math.min(excess, 2) * 3
+		elseif reaction(item) == "Bend" and excess < ((item.data.Uproot :: number?) or 0.7) then
+			-- trees, lamp posts and towers bend away and spring back (harder the stronger the clap)
+			item.dang += Vector3.new(dir.Z, 0, -dir.X) * math.min(excess, 2) * 7
 			item.active = true
 			item.healAt = now
 		else
+			if reaction(item) == "Bend" then
+				-- past its Uproot force: torn out and thrown (it flies back and replants itself)
+				item.data.Thrown = true
+				item.dpos, item.dang, item.drot = Vector3.zero, Vector3.zero, CFrame.identity
+				excess -= (item.data.Uproot :: number?) or 0.7
+			end
 			local launch = (item.data.Launch :: number?) or LAUNCH[item.kind] or 1
 			if item.kind == "Drift" or item.data.Float == true then
 				launch *= 0.35 -- nothing slows floating things down but drag: keep them in view
 			end
-			local e = math.min(excess, 6)
+			-- past 1, extra force throws things less and less further, so they stay in view
+			local e = if excess < 1 then excess else 1 + math.min(excess - 1, 5) * 0.4
 			item.dvel += (dir * (6 + 22 * e) + up * (3 + 16 * e)) * launch * scale
 			local spinAxis = Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(-1, 1), rng:NextNumber(-1, 1))
 			if spinAxis.Magnitude > 0.01 then
@@ -497,7 +507,7 @@ local function stepFlight(item: Item, dt: number, now: number): boolean
 		item.dang += (-tilt * 40 - item.dang * 5) * dt
 		item.dpos = tilt + item.dang * dt
 		local angle = item.dpos.Magnitude
-		item.drot = if angle > 1e-4 then CFrame.fromAxisAngle(item.dpos.Unit, math.min(angle, 1.2)) else CFrame.identity
+		item.drot = if angle > 1e-4 then CFrame.fromAxisAngle(item.dpos.Unit, math.min(angle, 1.4)) else CFrame.identity
 		if angle < 0.002 and item.dang.Magnitude < 0.01 then
 			item.dpos, item.dang, item.drot = Vector3.zero, Vector3.zero, CFrame.identity
 			return false
@@ -699,6 +709,9 @@ local function updateItems(dt: number)
 		-- the per-clap layer on top
 		if item.active then
 			item.active = stepFlight(item, dt, time)
+			if not item.active then
+				item.data.Thrown = nil
+			end
 			local c = item.pivot.Position
 			local t = CFrame.new(c + (if reaction(item) == "Bend" then Vector3.zero else item.dpos)) * item.drot * CFrame.new(-c)
 			for i, p in item.parts do

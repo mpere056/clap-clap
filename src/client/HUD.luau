@@ -36,7 +36,6 @@ export type Handlers = {
 	buy: (string, string?, any) -> (),
 	curtainCall: () -> (),
 	rebirth: () -> (),
-	setting: (string, any) -> (),
 	view: () -> (),
 	travel: (number) -> (),
 }
@@ -503,93 +502,6 @@ function HUD.setView(available: boolean, aerial: boolean)
 	end
 end
 
-local powerValue = 1
-local dragging = false
-local settingsModal: UIKit.Modal
-
-local function buildSettings(parent: Instance)
-	settingsModal = UIKit.modal({ name = "Settings", title = "Settings", icon = Icons.get("ui_gear"), color = UIKit.Colors.teal, size = Vector2.new(520, 300) })
-	local body = settingsModal.body
-	refs.powerLabel = UIKit.label({ Size = UDim2.new(1, 0, 0, 26), TextSize = 22, TextXAlignment = Enum.TextXAlignment.Left, Text = "Clap power shown: 100%", Parent = body })
-	UIKit.label({
-		Position = UDim2.fromOffset(0, 28),
-		Size = UDim2.new(1, 0, 0, 40),
-		TextSize = 15,
-		TextWrapped = true,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTransparency = 0.15,
-		Text = "Tone down how big your claps look (to you and everyone else). Your earnings don't change.",
-		Parent = body,
-	}, 1.5)
-	local track = UIKit.create("TextButton", {
-		Name = "Track",
-		Position = UDim2.fromOffset(4, 88),
-		Size = UDim2.new(1, -8, 0, 18),
-		BackgroundColor3 = UIKit.Colors.inset,
-		Text = "",
-		AutoButtonColor = false,
-		Parent = body,
-	})
-	UIKit.corner(track, 9)
-	UIKit.outline(track, 3)
-	refs.powerFill = UIKit.create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = UIKit.Colors.gold, Parent = track })
-	UIKit.corner(refs.powerFill, 9)
-	refs.powerKnob = UIKit.create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(1, 0, 0.5, 0),
-		Size = UDim2.fromOffset(32, 32),
-		BackgroundColor3 = WHITE,
-		Parent = track,
-	})
-	UIKit.corner(refs.powerKnob)
-	UIKit.outline(refs.powerKnob, 3)
-	local function setFromX(x: number)
-		local k = math.clamp((x - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X), 0.1, 1)
-		powerValue = math.floor(k * 20 + 0.5) / 20
-	end
-	track.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			setFromX(input.Position.X)
-		end
-	end)
-	game:GetService("UserInputService").InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			setFromX(input.Position.X)
-		end
-	end)
-	game:GetService("UserInputService").InputEnded:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-			dragging = false
-			handlers.setting("powerDisplay", powerValue)
-		end
-	end)
-	refs.cosmeticsButton = UIKit.button({
-		color = UIKit.Colors.purple,
-		text = "Wings, halo & titles: shown",
-		textSize = 20,
-		size = UDim2.new(1, 0, 0, 58),
-		position = UDim2.fromOffset(0, 134),
-		parent = body,
-	})
-	refs.cosmeticsButton.Activated:Connect(function()
-		handlers.setting("showCosmetics", not (Store.state.showCosmetics ~= false))
-	end)
-	local toggle = UIKit.dockButton({ name = "SettingsToggle", text = "", icon = Icons.get("ui_gear"), color = UIKit.Colors.teal, width = 66, order = 3 })
-	toggle.Activated:Connect(settingsModal.toggle)
-end
-
-local function refreshSettings()
-	local s = Store.state
-	if not dragging then
-		powerValue = s.powerDisplay or 1
-	end
-	refs.powerLabel.Text = string.format("Clap power shown: %d%%", math.floor(powerValue * 100 + 0.5))
-	refs.powerFill.Size = UDim2.new(powerValue, 0, 1, 0)
-	refs.powerKnob.Position = UDim2.new(powerValue, 0, 0.5, 0)
-	UIKit.setButton(refs.cosmeticsButton, nil, if s.showCosmetics ~= false then "Wings, halo & titles: shown" else "Wings, halo & titles: hidden")
-end
-
 ----------------------------------------------------------------------------------------------------
 -- public API
 
@@ -623,7 +535,6 @@ function HUD.init(callbacks: Handlers)
 	buildToasts(safe)
 	buildShop(safe)
 	buildStages(safe)
-	buildSettings(safe)
 	buildView(safe)
 	buildPrestige(safe, "curtainCall", 186, UIKit.Colors.pink, "Curtain Call", "ui_curtain", "Take a bow", function()
 		handlers.curtainCall()
@@ -812,7 +723,6 @@ function HUD.update(t: number, stageId: number)
 	refs.hint.Visible = claps == 0
 	refreshShop()
 	refreshStages()
-	refreshSettings()
 end
 
 function HUD.updateOvation()

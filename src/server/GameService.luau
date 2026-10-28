@@ -555,23 +555,6 @@ local function onWalk(player: Player, on: any)
 	end
 end
 
--- per-player settings: how big your claps look (0.1..1) and whether cosmetics/titles show
-local function onSettings(player: Player, key: any, value: any)
-	local rt = runtimes[player]
-	if not rt then
-		return
-	end
-	if key == "powerDisplay" and type(value) == "number" and value == value then
-		rt.state.powerDisplay = math.clamp(math.floor(value * 20 + 0.5) / 20, 0.1, 1)
-	elseif key == "showCosmetics" and type(value) == "boolean" then
-		rt.state.showCosmetics = value
-	else
-		return
-	end
-	publishProfile(player, rt)
-	rt.dirty = true
-end
-
 local function onPlayerAdded(player: Player)
 	local state = DataService.load(player)
 	if not state then
@@ -580,6 +563,9 @@ local function onPlayerAdded(player: Player)
 	end
 	-- older saves may reference stages that are no longer built
 	state.stage = math.clamp(state.stage, 1, Config.lastBuiltStage())
+	-- there's no settings menu any more: everyone's claps show at full size, cosmetics shown
+	state.powerDisplay = 1
+	state.showCosmetics = true
 	local now = os.clock()
 	local rt: Runtime = {
 		state = state,
@@ -620,7 +606,6 @@ function GameService.init(remoteFolder: Folder)
 	(remotes.CurtainCall :: RemoteFunction).OnServerInvoke = onCurtainCall;
 	(remotes.Rebirth :: RemoteFunction).OnServerInvoke = onRebirth;
 	(remotes.Travel :: RemoteFunction).OnServerInvoke = onTravel;
-	(remotes.Settings :: RemoteEvent).OnServerEvent:Connect(onSettings);
 	(remotes.Walk :: RemoteEvent).OnServerEvent:Connect(onWalk);
 	(remotes.EventShop :: RemoteFunction).OnServerInvoke = onEventShop;
 	(remotes.Equip :: RemoteEvent).OnServerEvent:Connect(onEquip)

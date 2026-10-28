@@ -35,7 +35,6 @@ local clapRemote = remotes:WaitForChild("ClapBatch") :: RemoteEvent
 local purchaseRemote = remotes:WaitForChild("Purchase") :: RemoteFunction
 local curtainCallRemote = remotes:WaitForChild("CurtainCall") :: RemoteFunction
 local rebirthRemote = remotes:WaitForChild("Rebirth") :: RemoteFunction
-local settingsRemote = remotes:WaitForChild("Settings") :: RemoteEvent
 local walkRemote = remotes:WaitForChild("Walk") :: RemoteEvent
 local watchAdRemote = remotes:WaitForChild("WatchAd") :: RemoteEvent
 local eventShopRemote = remotes:WaitForChild("EventShop") :: RemoteFunction
@@ -121,9 +120,6 @@ HUD.init({
 	end,
 	rebirth = function()
 		invoke(rebirthRemote)
-	end,
-	setting = function(key, value)
-		settingsRemote:FireServer(key, value)
 	end,
 	view = function()
 		aerial = not aerial

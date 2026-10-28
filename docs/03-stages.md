@@ -69,6 +69,11 @@ Reference points: 1 kg TNT ≈ 4.2 MJ. Largest human explosion ever ≈ 50 Mt. C
 - **Camera:** Orbital, then slowly pulling back to show Asia.
 - **Display:** megatons, 100 Mt → 100,000 Mt. Badges: "Heard across the whole country", "The sound circles the Earth".
 - **Breakthrough → 7:** the glow spreads across the ocean; pull back to the full globe.
+- **Built (2026-10-28):** Honshu, Hokkaido, Shikoku, Kyushu, Okinawa and the neighbouring coasts (Korea,
+  China, Sakhalin) with rounded coastlines; mountains with snow, Mount Fuji, forests, seven cities
+  and the bullet-train line with a train. Ships, planes and clouds around it. Lasting: the glow and
+  five pressure rings rippling out over the sea. Per clap: ships, planes, clouds, the train and city
+  blocks get tossed.
 
 ## Stage 7 — The Planet 地球
 - **Setting:** Whole Earth in space, a glowing radial blast centred on your location, concentric light rings.
@@ -76,6 +81,10 @@ Reference points: 1 kg TNT ≈ 4.2 MJ. Largest human explosion ever ≈ 50 Mt. C
 - **Display:** "× dinosaur meteor", 0.001× → 1×.
 - **Captions:** "Rivals the meteor that ended the dinosaurs." / "Molten rock rains worldwide."
 - **Breakthrough → 8:** the whole planet flushes orange.
+- **Built (2026-10-28):** the real continents (turned so Japan, where everyone stands, is on top),
+  ice caps, clouds, city lights, satellites and the Moon. Lasting: the glow patch and six light rings
+  spreading round the globe; the planet tints orange. Per clap: clouds and satellites get knocked
+  about; only a Space-level visitor can nudge the Moon. Molten Earth uses the same globe.
 
 ## Stage 8 — Molten Earth 灼熱
 - **Setting:** Earth turns orange, white steam (oceans boiling), then the crust cracks into glowing lava plates.

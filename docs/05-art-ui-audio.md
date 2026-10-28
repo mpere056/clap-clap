@@ -101,11 +101,13 @@ the top Roblox simulators. That style is built from `src/client/UIKit.luau`:
   get a 🔒 cover saying what unlocks them.
 - Card colour = the stage the item belongs to, read like rarities: grey, green, blue, purple,
   orange, red, teal, magma, cosmic.
-- The bottom-right dock: View (teal, stages 2–6: Aerial ↔ Close camera), 🏆 (purple), ⚙ (teal),
-  Stages (blue), Upgrades (gold). There's no Walk/Sit button: moving or jumping while seated gets
-  you up, and walking into a seat sits you down. Clap keys: click / tap / F (Space jumps).
+- The bottom-right dock: View (teal, stages 2–6: Aerial ↔ Close camera), Stages (blue), Upgrades
+  (gold). There's no Walk/Sit button: moving or jumping while seated gets you up, and walking into
+  a seat sits you down. Clap keys: click / tap / F (Space jumps).
   A red "!" badge pulses on the beat when an upgrade is affordable.
-- Plain lists are fine where a list reads better (leaderboards).
+- No settings or leaderboard buttons (they clutter the screen). The leaderboard is a big framed
+  board by the left corner of the stage in the hall ("TOP CLAPPERS": world top 8 with avatar
+  headshots and clap power; this server's players when world rankings aren't available).
 
 ## Audio
 

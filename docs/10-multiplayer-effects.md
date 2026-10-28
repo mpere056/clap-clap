@@ -49,10 +49,10 @@ marked with a `DamageKind` move as one (cars, trees, fences). Default thresholds
 | 0.12 | Shockwave ring |
 | 0.25 | Sparks, flying chips |
 | 0.3 | Windows shatter into shards (reaching twice as far: sound carries), and the panes come back 6–8 s later. Trees bend and spring back |
-| 0.45 | Roofs lift off and fall back |
+| 0.45 | Roofs lift off and fall back. Trees, lamps, pylons and towers bend harder the stronger the clap; 0.7 past their resistance they're uprooted and thrown, then replant themselves |
 | 0.7 | Cracks in the ground under the clapper; your screen flashes |
 | 1 | A second, wider gold wave, and debris erupts from the ground |
-| 1.1 | Whole buildings (City, Region) jump |
+| 0.45+ | City buildings: a maxed City player makes them hop; a Region-level visitor (force 1+) throws them across the blocks |
 | 2 | A shockwave dome; nearby cameras shake |
 | 4 | A pillar of light |
 
@@ -86,15 +86,15 @@ Some moments *should* hit everyone at once, because that's what makes multiplaye
 | 1 Ceremony | Chairs, classmates and players' chairs fly; small props hop; windows shatter; lamps swing | Chairs scooted back, classmates covering ears, dB meter |
 | 2 Gym | Chairs, basketballs, cones, ball cart and mats fly; high windows shatter; bunting tears off; hoops and scoreboard crash down; lamps swing | Chairs blown to the walls, lamps swinging, cracks up the end walls |
 | 3 Town | Glass, fences, mailboxes, bins, cars, doors, chimneys and roof slabs fly; trees and street lamps bend; birds burst up; very strong claps make houses jump | The sports field cracks open |
-| 4 City | Cars fly, trees and radio masts bend, buildings jump | Crater growth; buildings flatten from the centre out |
-| 5 Region | Skyline towers sway; trees and pylons bend; cars and billboards fly; birds | The dust wall rolls in and flattens the towers it reaches |
-| 6 Country | Clouds, ships and planes are blown away and drift back | The glow spreads across the map |
-| 7–8 Planet / Molten | Clouds blow off the globe, satellites get knocked about; lava cracks flare | The planet turns orange, oceans steam, crust cracks |
+| 4 City | Cars fly; trees and radio masts bend, then get uprooted; buildings hop, then get thrown | Crater growth; buildings flatten from the centre out |
+| 5 Region | Skyline towers sway and topple; trees and pylons bend, then get uprooted; cars and billboards fly; birds | The dust wall rolls in and flattens the towers it reaches |
+| 6 Country | Clouds, ships, planes, the bullet train and city blocks get tossed | The glow spreads; pressure rings ripple out over the sea |
+| 7–8 Planet / Molten | Clouds blow off the globe, satellites get knocked about (only a Space-level visitor nudges the Moon); lava cracks flare | Light rings spread round the Planet; it turns orange, oceans steam, crust cracks |
 | 9 Space | Fragments and rocks pushed away | Fragments drift away as your progress grows |
 
 Reach is set per stage (`REACH_SCALE` in Environment.luau: hall 1, gym 2, town 8, city 40,
 region 30, country 60, globes 40, space 20). The effect visuals (rings, chunks, birds) use the
-camera's scale instead (`RING_SCALE`). Dust and ground cracks are capped so even a Space-level
+camera's scale instead (`RING_SCALE`). Past force 1 at an item, extra force throws it less and less further (so a Space-level visitor doesn't empty the view). Dust and ground cracks are capped so even a Space-level
 visitor doesn't fog out the City. Floating things (clouds, ships, satellites, Space fragments)
 travel about a third as far as things with gravity, so they stay in view. On the globes, the
 lasting blast glow is a flattened sphere hugging the surface (at most 45% of the globe's radius),
