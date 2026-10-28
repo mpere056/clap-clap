@@ -24,17 +24,52 @@ All destruction and environment reactions run **client-side**, on your device on
 
 So two players in the same gym see the same building and each other, but each sees **their own level of destruction**. Nobody can ruin anyone else's world, and a new player always starts in a pristine hall.
 
-### 3. Other players' claps: you see them, scaled down
-You still see and feel other players' power, as a lighter "ambient" layer:
+### 3. Every clap pushes the world, for everyone (2026-10-27)
+The lasting damage (section 2) stays yours. But each clap, yours or anyone's, also gives the
+stage a **temporary shove** that heals after a few seconds. Every client applies every clap the same
+way (yours right away, others' from their clap pulse), so all players in the stage see the same
+chairs fly. Nothing is replicated except the pulse.
 
-| Your own clap | Another player's clap |
+**Clap force** `F = Formulas.clapForce × grade × "clap power shown"`. F is 1 once a stage is
+maxed, and a visitor adds 1 per stage they're ahead. In the hall it starts at 0 (the first claps
+barely register). Later stages start higher (0.15 in the gym, 0.3 from the Town on), since you've
+already wrecked a hall by then. Perfect hits hardest (×1), Great ×0.85, Good ×0.7 and Miss ×0.2.
+The reach grows with F (hall scale: `6 + 25·min(F,1) + 30·max(F−1,0)` studs, times the stage's
+reach scale below). The force at an item falls off with distance: `F·(1−d/reach)^1.5`. Each kind
+of item needs a minimum force before it reacts. Items can set their own `Resist` / `Launch`
+attributes (the Town tunes every prop for its own force range: see 03-stages). Parts in a Model
+marked with a `DamageKind` move as one (cars, trees, fences). Default thresholds:
+
+| Force (clap force F for the clapper's own effects, force at the item for props) | What happens |
 |---|---|
-| Full shockwave, full debris, full camera shake | Smaller shockwave ring around *them*, tinted their colour |
-| Full sound, layered for your stage | Quieter, positional sound (fades with distance) |
-| Big number pop | Small pop above their head (optional, togglable) |
-| Damages your world state | Never changes your world state |
+| any | The hands pop (a white disc in rays); nothing else on a fresh stage |
+| 0.04 | Small props hop |
+| 0.05 | Dust puff at the clapper's feet |
+| 0.1 | Chairs scoot, then fly; the classmates ride along. Players' chairs fly with their seat and whoever is sitting in it (never from your own clap) |
+| 0.12 | Shockwave ring |
+| 0.25 | Sparks, flying chips |
+| 0.3 | Windows shatter into shards (reaching twice as far: sound carries), and the panes come back 6–8 s later. Trees bend and spring back |
+| 0.45 | Roofs lift off and fall back. Trees, lamps, pylons and towers bend harder the stronger the clap; 0.7 past their resistance they're uprooted and thrown, then replant themselves |
+| 0.7 | Cracks in the ground under the clapper; your screen flashes |
+| 1 | A second, wider gold wave, and debris erupts from the ground |
+| 0.45+ | City buildings: a maxed City player makes them hop; a Region-level visitor (force 1+) throws them across the blocks |
+| 2 | A shockwave dome; nearby cameras shake |
+| 4 | A pillar of light |
 
-Players clap 5–10×/s, so others' effects are **throttled** (e.g. max ~4 visible bursts per player per second, nearest players prioritised) to protect FPS on mobile.
+Things fly with gravity, bounce, then glide home after about 2–6 s (longer for stronger claps).
+Lava cracks on the globes flare when a clap reaches them.
+
+**Players get pushed too.** If another player's clap reaches you with force ≥ 1 (at most once
+every 4 s), your own client launches your character. You own its physics, so everyone sees you
+fly. Walking players get knocked back. Seated players get knocked out of their seat at force ≥ 1.5;
+below that, the seat shakes.
+
+Pulses are throttled to one burst per player per 0.25 s.
+
+### Visiting is for showing off, not farming
+A visitor's Applause per clap is capped at the stage's breakthrough power, then divided by 10 per
+stage back (`VisitorGainPerStageBack`). Their claps hit hardest of all, so visiting is where the
+biggest effects live.
 
 ### 4. Shared spectacle moments (synced for everyone)
 Some moments *should* hit everyone at once, because that's what makes multiplayer exciting:
@@ -46,14 +81,24 @@ Some moments *should* hit everyone at once, because that's what makes multiplaye
 
 ### How it plays per stage
 
-| Stage | Shared (everyone sees) | Local (your power only) |
+| Stage | Every clap shoves (shared, heals) | Lasting damage (your progress only) |
 |---|---|---|
-| 1 Ceremony | Hall, seats, other players clapping in their seats | Classmates covering ears, chairs scooting, dB meter, windows rattling |
-| 2 Gym | Gym building, players standing on the court | Chair rings blowing out, dust waves, lights swinging, wall cracks |
-| 3–4 Town / City | Town diorama, players as giants standing in it (or tiny figures in an aerial view) | Roofs peeling, debris rings, crater growth |
-| 5–6 Region / Country | Diorama / map, players in it | Dust fronts, shockwave glow spreading over the map |
-| 7–8 Planet / Molten | Mini-planet players stand on together | Glow rings, ocean steam, crust cracks (crack amount = your progress) |
-| 9 Space | Everyone floating among fragments | Fragments drift away from your claps; felt pulses |
+| 1 Ceremony | Chairs, classmates and players' chairs fly; small props hop; windows shatter; lamps swing | Chairs scooted back, classmates covering ears, dB meter |
+| 2 Gym | Chairs, basketballs, cones, ball cart and mats fly; high windows shatter; bunting tears off; hoops and scoreboard crash down; lamps swing | Chairs blown to the walls, lamps swinging, cracks up the end walls |
+| 3 Town | Glass, fences, mailboxes, bins, cars, doors, chimneys and roof slabs fly; trees and street lamps bend; birds burst up; very strong claps make houses jump | The sports field cracks open |
+| 4 City | Cars fly; trees and radio masts bend, then get uprooted; buildings hop, then get thrown | Crater growth; buildings flatten from the centre out |
+| 5 Region | Skyline towers sway and topple; trees and pylons bend, then get uprooted; cars and billboards fly; birds | The dust wall rolls in and flattens the towers it reaches |
+| 6 Country | Clouds, ships, planes, the bullet train and city blocks get tossed | The glow spreads; pressure rings ripple out over the sea |
+| 7–8 Planet / Molten | Clouds blow off the globe, satellites get knocked about (only a Space-level visitor nudges the Moon); lava cracks flare | Light rings spread round the Planet; it turns orange, oceans steam, crust cracks |
+| 9 Space | Fragments and rocks pushed away | Fragments drift away as your progress grows |
+
+Reach is set per stage (`REACH_SCALE` in Environment.luau: hall 1, gym 2, town 8, city 40,
+region 30, country 60, globes 40, space 20). The effect visuals (rings, chunks, birds) use the
+camera's scale instead (`RING_SCALE`). Past force 1 at an item, extra force throws it less and less further (so a Space-level visitor doesn't empty the view). Dust and ground cracks are capped so even a Space-level
+visitor doesn't fog out the City. Floating things (clouds, ships, satellites, Space fragments)
+travel about a third as far as things with gravity, so they stay in view. On the globes, the
+lasting blast glow is a flattened sphere hugging the surface (at most 45% of the globe's radius),
+not a flat disc.
 
 ## Technical notes
 

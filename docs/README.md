@@ -22,6 +22,7 @@ A Roblox incremental game inspired by the *"What if every clap were twice as lou
 | 08 | [Technical architecture](08-technical-architecture.md) | Roblox services, scripts, data, camera/stage system, tooling | Slightly |
 | 09 | [Roadmap](09-roadmap.md) | Phases, v1 scope, open questions | **Yes** |
 | 10 | [Multiplayer effects](10-multiplayer-effects.md) | How clap power affects the environment when several players share a stage | — (multiplayer) |
+| 11 | [Live ops](11-live-ops.md) | Events (Halloween, Christmas), event shop, Next update board, calendar and update cadence | No |
 
 ## Decisions made so far
 

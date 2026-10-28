@@ -22,7 +22,7 @@ local beatHits: { [number]: { [Player]: boolean } } = {}
 local inSyncUntil: { [Player]: number } = {}
 
 -- per-player claps since last pulse
-local pendingPulse: { [Player]: { count: number, perfect: boolean, stage: number } } = {}
+local pendingPulse: { [Player]: { count: number, perfect: boolean, stage: number, visitor: number, force: number } } = {}
 
 local PULSE_INTERVAL = 0.2
 
@@ -54,24 +54,29 @@ function SocialService.startOvation(triggeredBy: Player?)
 	})
 end
 
-function SocialService.addClaps(player: Player, count: number, perfect: boolean, stage: number)
+-- count: all claps (drives other players' ambient effects); good: on-beat claps (fill the
+-- Ovation); visitor: how many stages ahead of this stage the clapper is (0 = their own stage);
+-- force: how hard their claps hit this stage (Formulas.clapForce, toned down by their setting)
+function SocialService.addClaps(player: Player, count: number, good: number, perfect: boolean, stage: number, visitor: number, force: number)
 	if count <= 0 then
 		return
 	end
-	if not SocialService.isOvationActive() then
-		ovationProgress += count
+	if good > 0 and not SocialService.isOvationActive() then
+		ovationProgress += good * (if visitor > 0 then T.VisitorOvationMultiplier else 1)
 		if ovationProgress >= Formulas.ovationTarget(#Players:GetPlayers()) then
 			SocialService.startOvation(nil)
 		end
 	end
 	local pulse = pendingPulse[player]
 	if not pulse then
-		pulse = { count = 0, perfect = false, stage = stage }
+		pulse = { count = 0, perfect = false, stage = stage, visitor = visitor, force = force }
 		pendingPulse[player] = pulse
 	end
 	pulse.count += count
 	pulse.perfect = pulse.perfect or perfect
 	pulse.stage = stage
+	pulse.visitor = visitor
+	pulse.force = force
 end
 
 function SocialService.registerPerfect(player: Player, beat: number)
@@ -141,7 +146,9 @@ function SocialService.init(remoteFolder: Folder)
 						pulse.stage,
 						pulse.count,
 						pulse.perfect,
-						SocialService.isInSync(player)
+						SocialService.isInSync(player),
+						pulse.visitor,
+						math.floor(pulse.force * 100 + 0.5) / 100
 					)
 				end
 			end

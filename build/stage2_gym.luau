@@ -1,6 +1,8 @@
 -- Builds Stage 2 (The Shockwave, school gym) into workspace.Stages.Gym. Safe to re-run.
 -- Seen top-down: players sit in chairs in the middle of the court, loose chairs get blown outwards.
--- Same conventions as stage1_ceremony.luau (Spots/, Chairs/, DamageKind/DamageAt attributes).
+-- Same conventions as stage1_ceremony.luau (Spots/, Chairs/, DamageKind/DamageAt attributes); per-clap
+-- breakables use Resist / Launch like stage3_town.luau. Lasting damage (your progress): chairs blown
+-- to the walls, lamps swinging, cracks spreading up the end walls.
 
 local ORIGIN = Vector3.new(3000, 0, 0)
 
@@ -80,8 +82,8 @@ end
 -- walls, ceiling
 part({ Name = "Ceiling", Size = Vector3.new(W, 1, L), CFrame = at(0, H, 0), Color = Color3.fromRGB(210, 210, 205), Transparency = 1, Parent = structure })
 for side = -1, 1, 2 do
-	part({ Name = "WallSide", Size = Vector3.new(1, H, L), CFrame = at(side * W / 2, H / 2, 0), Color = WALL, Parent = structure })
-	part({ Name = "WallEnd", Size = Vector3.new(W, H, 1), CFrame = at(0, H / 2, side * L / 2), Color = WALL, Parent = structure })
+	part({ Name = "WallSide", Size = Vector3.new(1, H, L), CFrame = at(side * W / 2, H / 2, 0), Color = WALL, CanCollide = true, Parent = structure })
+	part({ Name = "WallEnd", Size = Vector3.new(W, H, 1), CFrame = at(0, H / 2, side * L / 2), Color = WALL, CanCollide = true, Parent = structure })
 	-- wall padding strip
 	part({ Name = "Padding", Size = Vector3.new(0.6, 6, L), CFrame = at(side * (W / 2 - 0.8), 3, 0), Color = Color3.fromRGB(40, 70, 130), Parent = structure })
 	-- red & white bunting along the sides
@@ -94,17 +96,67 @@ for side = -1, 1, 2 do
 			Color = if isRed then Color3.fromRGB(196, 40, 48) else Color3.fromRGB(245, 243, 238),
 			Material = Enum.Material.Fabric,
 			Parent = structure,
-			Attrs = { DamageKind = "Rattle", DamageAt = 0.1 },
+			Attrs = { DamageKind = "Fly", Resist = 0.45, Launch = 0.8 }, -- torn off by big claps
 		})
 	end
 end
 
--- basketball hoops
+-- basketball hoops: the board and rim come crashing down
+local breakables = folder("Breakables")
 for _, side in { -1, 1 } do
 	local z = side * (L / 2 - 6)
-	part({ Name = "Backboard", Size = Vector3.new(12, 7, 0.4), CFrame = at(0, 20, z), Color = Color3.fromRGB(250, 250, 250), Parent = structure, Attrs = { DamageKind = "Rattle", DamageAt = 0.2 } })
-	part({ Name = "Rim", Size = Vector3.new(4, 0.3, 4), CFrame = at(0, 17, z - side * 2.4), Color = LINE, Parent = structure })
+	local hoop = Instance.new("Model")
+	hoop.Name = "Hoop"
+	hoop:SetAttribute("DamageKind", "Fly")
+	hoop:SetAttribute("Resist", 0.6)
+	hoop:SetAttribute("Launch", 0.5)
+	hoop.Parent = breakables
+	part({ Name = "Backboard", Size = Vector3.new(12, 7, 0.4), CFrame = at(0, 20, z), Color = Color3.fromRGB(250, 250, 250), Parent = hoop })
+	part({ Name = "Rim", Size = Vector3.new(4, 0.3, 4), CFrame = at(0, 17, z - side * 2.4), Color = LINE, Parent = hoop })
+	hoop.WorldPivot = at(0, 20, z)
 	part({ Name = "Pole", Size = Vector3.new(1, 22, 1), CFrame = at(0, 11, z + side * 3), Color = METAL, Parent = structure })
+	-- scoreboard high on the end wall
+	part({ Name = "Scoreboard", Size = Vector3.new(16, 7, 0.8), CFrame = at(0, 40, side * (L / 2 - 1)), Color = Color3.fromRGB(30, 30, 35), Parent = breakables, Attrs = { DamageKind = "Fly", Resist = 0.5, Launch = 0.5 } })
+	for _, x in { -4, 4 } do
+		part({ Name = "Digits", Size = Vector3.new(5, 3.5, 0.2), CFrame = at(x, 40, side * (L / 2 - 1.5)), Color = Color3.fromRGB(255, 120, 40), Material = Enum.Material.Neon, Parent = breakables, Attrs = { DamageKind = "Fly", Resist = 0.5, Launch = 0.6 } })
+	end
+end
+
+-- high windows along both sides
+for _, sx in { -1, 1 } do
+	for z = -L / 2 + 14, L / 2 - 14, 16 do
+		part({ Name = "Window", Size = Vector3.new(0.3, 8, 10), CFrame = at(sx * (W / 2 - 0.6), 44, z), Color = Color3.fromRGB(190, 220, 240), Material = Enum.Material.Glass, Transparency = 0.3, Parent = breakables, Attrs = { DamageKind = "Shatter", Resist = 0.12 } })
+	end
+end
+
+-- lasting damage: cracks creep up the end walls as your progress grows
+for _, side in { -1, 1 } do
+	for i = 1, 8 do
+		local x = rng:NextNumber(-45, 45)
+		local length = rng:NextNumber(8, 22)
+		part({ Name = "WallCrack", Size = Vector3.new(rng:NextNumber(0.4, 0.8), length, 0.1), CFrame = at(x, length / 2 + rng:NextNumber(0, 20), side * (L / 2 - 0.55)) * CFrame.Angles(0, 0, rng:NextNumber(-0.6, 0.6)), Color = Color3.fromRGB(70, 60, 55), Transparency = 1, Parent = breakables, Attrs = { DamageKind = "Reveal", DamageAt = 0.1 + i * 0.1, Visible = 0 } })
+	end
+end
+
+-- balls, cones and a ball cart lying around the court
+for i = 1, 10 do
+	part({ Name = "Basketball", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 1.6, 1.6), CFrame = at(rng:NextNumber(-45, 45), 0.8, rng:NextNumber(-70, 70)), Color = Color3.fromRGB(225, 110, 40), Parent = breakables, Attrs = { DamageKind = "Fly", Resist = 0.01, Launch = 1.5 } })
+end
+for i = 1, 8 do
+	part({ Name = "Cone", Size = Vector3.new(1.2, 1.6, 1.2), CFrame = at(-44 + i * 11, 0.8, rng:NextNumber(-70, -66) * (if i % 2 == 0 then -1 else 1)), Color = Color3.fromRGB(255, 130, 40), Parent = breakables, Attrs = { DamageKind = "Fly", Resist = 0.02, Launch = 1.4 } })
+end
+do
+	local cart = Instance.new("Model")
+	cart.Name = "BallCart"
+	cart:SetAttribute("DamageKind", "Fly")
+	cart:SetAttribute("Resist", 0.08)
+	cart:SetAttribute("Launch", 1)
+	cart.Parent = breakables
+	part({ Name = "Frame", Size = Vector3.new(5, 3, 3), CFrame = at(46, 2, 50), Color = METAL, Transparency = 0.4, Parent = cart })
+	for k = 0, 5 do
+		part({ Name = "Ball", Shape = Enum.PartType.Ball, Size = Vector3.new(1.4, 1.4, 1.4), CFrame = at(44.5 + (k % 3) * 1.5, 2.8, 49.3 + math.floor(k / 3) * 1.4), Color = Color3.fromRGB(225, 110, 40), Parent = cart })
+	end
+	cart.WorldPivot = at(46, 0, 50)
 end
 
 -- loose props that get blown around (local "Topple" chairs)
@@ -166,14 +218,15 @@ for i = 1, 6 do
 		CFrame = at(-52 + 4, 0.4, -40 + i * 12) * CFrame.Angles(0, math.rad(rng:NextNumber(-6, 6)), 0),
 		Color = Color3.fromRGB(60, 100, 170),
 		Parent = props,
-		Attrs = { DamageKind = "Rattle", DamageAt = 0.05 },
+		Attrs = { DamageKind = "Fly", Resist = 0.08, Launch = 0.6 },
 	})
 end
 
 -- lighting: indoor lamps high up
 for x = -36, 36, 36 do
 	for z = -60, 60, 30 do
-		local lamp = part({ Name = "Lamp", Size = Vector3.new(4, 1, 4), CFrame = at(x, H - 4, z), Color = Color3.fromRGB(255, 250, 235), Material = Enum.Material.Neon, Parent = structure })
+		-- hanging lamps swing (more as your progress grows, and with every clap)
+		local lamp = part({ Name = "Lamp", Size = Vector3.new(4, 1, 4), CFrame = at(x, H - 4, z), Color = Color3.fromRGB(255, 250, 235), Material = Enum.Material.Neon, Parent = structure, Attrs = { DamageKind = "Swing", DamageAt = 0.25 } })
 		local light = Instance.new("PointLight")
 		light.Range = 50
 		light.Brightness = 1.1

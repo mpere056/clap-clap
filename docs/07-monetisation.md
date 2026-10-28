@@ -59,6 +59,10 @@ Expect low revenue. A 30-minute game gives little reason to buy.
 - Codes (social media / update codes)
 - Free spin wheel, first-run achievement rewards
 
+## Implemented: rewarded video ads (2026-10-27)
+
+A "📺 2× Applause +5 min · Watch Now!" card appears when Roblox has an ad ready (opt-in, dismissible). The reward is a developer product granted through ProcessReceipt (`ProductPurchaseChannel.AdReward`); the same product can be bought with Robux. Boosts stack up to 60 minutes. Set `Config.Ads.BoostProductId` to switch it on.
+
 ## Policy constraints (must-do)
 
 - **Paid random items (Lockers bought with Robux):** odds must be **clearly shown before purchase**. Some regions restrict paid random items entirely. Check `PolicyService:GetPolicyInfoForPlayerAsync(player).ArePaidRandomItemsRestricted` and hide or disable Robux Lockers for those players. Lockers bought with in-game Applause are fine.

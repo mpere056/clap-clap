@@ -11,10 +11,12 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Formulas = require(Shared.Formulas)
 local Format = require(Shared.Format)
-local Num = require(Shared.Num)
 
 local Beat = require(script.Parent.Beat)
 local Store = require(script.Parent.Store)
+local UIKit = require(script.Parent.UIKit)
+local UpgradesUI = require(script.Parent.UpgradesUI)
+local Icons = require(Shared.Icons)
 
 local HUD = {}
 
@@ -26,14 +28,21 @@ local SANS = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWei
 local SANS_MED = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium)
 local GOLD = Color3.fromRGB(232, 184, 102)
 local WHITE = Color3.new(1, 1, 1)
-local PANEL = Color3.fromRGB(16, 18, 26)
 
 local gui: ScreenGui
 local refs: { [string]: any } = {}
 local lastCaptionKey = ""
-local onBuy: ((string, string?, any) -> ())? = nil
-local onGraduate: (() -> ())? = nil
+export type Handlers = {
+	buy: (string, string?, any) -> (),
+	curtainCall: () -> (),
+	rebirth: () -> (),
+	view: () -> (),
+	travel: (number) -> (),
+}
+local handlers: Handlers
+local streak = 0
 local shopOpen = false
+local shopEverOpened = false
 local predictedClaps = 0
 local captionLocked = false
 
@@ -81,22 +90,6 @@ local function text(props: { [string]: any }): TextLabel
 	-- soft drop shadow like the video's captions
 	create("UIStroke", { Color = Color3.new(0, 0, 0), Transparency = 0.72, Thickness = 1.5, Parent = label })
 	return label
-end
-
-local function button(props: { [string]: any }): TextButton
-	local defaults = {
-		BackgroundColor3 = Color3.fromRGB(40, 44, 58),
-		TextColor3 = WHITE,
-		FontFace = SANS,
-		TextSize = 16,
-		AutoButtonColor = true,
-	}
-	for k, v in props do
-		defaults[k] = v
-	end
-	local b = create("TextButton", defaults)
-	corner(8).Parent = b
-	return b
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -149,11 +142,35 @@ local function buildPowerBlock(parent: Instance)
 			}),
 		}),
 	})
-	refs.meterTicks = create("Frame", { Name = "Ticks", BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 11), Size = UDim2.new(1, 0, 0, 16), Parent = meter })
-	for _, tick in { { 0.3, "Noisy" }, { 0.55, "Pain" }, { 0.95, "Limit" } } do
-		text({ Size = UDim2.new(0, 60, 1, 0), Position = UDim2.new(tick[1], -30, 0, 0), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 11, FontFace = SANS_MED, TextTransparency = 0.25, Text = tick[2], Parent = refs.meterTicks })
-	end
+	refs.meterTicks = create("Frame", { Name = "Ticks", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 8), Parent = track })
 	refs.meterLabel = text({ Name = "Next", Position = UDim2.new(0, 0, 0, 11), Size = UDim2.new(1, 0, 0, 16), TextSize = 12, FontFace = SANS_MED, TextTransparency = 0.2, Text = "", Parent = meter })
+end
+
+-- small notches on the meter, one per tier of the current stage
+local tickStage = 0
+local function refreshTicks(stageId: number, tier: number)
+	local tiers = Config.getStage(stageId).tiers
+	if tickStage ~= stageId or #refs.meterTicks:GetChildren() ~= #tiers then
+		tickStage = stageId
+		refs.meterTicks:ClearAllChildren()
+		for i, info in tiers do
+			create("Frame", {
+				Name = "Tick" .. i,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.new(info.at, 0, 0.5, 0),
+				Size = UDim2.fromOffset(3, 14),
+				BorderSizePixel = 0,
+				Parent = refs.meterTicks,
+			}, { corner(2) })
+		end
+	end
+	for i in tiers do
+		local tick = refs.meterTicks:FindFirstChild("Tick" .. i)
+		if tick then
+			tick.BackgroundColor3 = if i <= tier then GOLD else WHITE
+			tick.BackgroundTransparency = if i <= tier then 0 else 0.35
+		end
+	end
 end
 
 local function buildTopCenter(parent: Instance)
@@ -165,7 +182,12 @@ local function buildTopCenter(parent: Instance)
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
-	refs.applause = text({ Size = UDim2.new(1, 0, 0, 38), TextXAlignment = Enum.TextXAlignment.Center, FontFace = SERIF, TextSize = 32, Text = "👏 0", Parent = frame })
+	-- [hands] 1.2K, centred as a pair
+	local icon, label = UIKit.costLine(frame, UDim2.new(), UDim2.new(1, 0, 0, 38), 32)
+	icon.Image = Icons.get("ui_hands")
+	icon.Size = UDim2.fromOffset(40, 40)
+	label.FontFace = SERIF
+	refs.applause = label
 	refs.rate = text({ Position = UDim2.new(0, 0, 0, 38), Size = UDim2.new(1, 0, 0, 20), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 14, FontFace = SANS_MED, TextTransparency = 0.15, Text = "", Parent = frame })
 end
 
@@ -191,18 +213,25 @@ local function buildCenter(parent: Instance)
 	local holder = create("Frame", {
 		Name = "Beat",
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -150),
+		Position = UDim2.new(0.5, 0, 1, -190),
 		Size = UDim2.new(0, 120, 0, 120),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
-	refs.beatRing = create("Frame", {
+	refs.beatTarget = create("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(64, 64),
 		BackgroundTransparency = 1,
 		Parent = holder,
-	}, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Color = WHITE, Thickness = 3, Transparency = 0.3 }) })
+	}, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Color = WHITE, Thickness = 4, Transparency = 0.4 }) })
+	refs.beatRing = create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(150, 150),
+		BackgroundTransparency = 1,
+		Parent = holder,
+	}, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Color = WHITE, Thickness = 2, Transparency = 0.3 }) })
 	refs.beatDot = create("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -211,14 +240,14 @@ local function buildCenter(parent: Instance)
 		BackgroundTransparency = 0.2,
 		Parent = holder,
 	}, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
-	refs.combo = text({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.new(0, 220, 0, 22), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 16, Text = "", Parent = holder })
-	refs.perfect = text({ AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 0, 4), Size = UDim2.new(0, 220, 0, 24), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 20, TextColor3 = GOLD, TextTransparency = 1, Text = "PERFECT", Parent = holder })
+	refs.combo = text({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.new(0, 320, 0, 22), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 16, Text = "", Parent = holder })
+	refs.gradeLabel = text({ AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 0, 4), Size = UDim2.new(0, 260, 0, 30), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 24, TextColor3 = GOLD, TextTransparency = 1, Text = "", Parent = holder })
 
 	-- encore frenzy meter
 	local encore = create("Frame", {
 		Name = "Encore",
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -118),
+		Position = UDim2.new(0.5, 0, 1, -158),
 		Size = UDim2.new(0, 180, 0, 6),
 		BackgroundColor3 = WHITE,
 		BackgroundTransparency = 0.8,
@@ -227,10 +256,10 @@ local function buildCenter(parent: Instance)
 	refs.encoreFill = create("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 120, 150), Parent = encore }, { corner(3) })
 	refs.encoreLabel = text({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 1, 2), Size = UDim2.new(0, 260, 0, 16), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 12, FontFace = SANS_MED, TextTransparency = 0.25, Text = "ENCORE", Parent = encore })
 
-	-- captions
+	-- captions (above the button dock)
 	refs.caption = text({
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -62),
+		Position = UDim2.new(0.5, 0, 1, -102),
 		Size = UDim2.new(0.9, 0, 0, 32),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextSize = 26,
@@ -240,7 +269,7 @@ local function buildCenter(parent: Instance)
 	})
 	refs.captionJp = text({
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -40),
+		Position = UDim2.new(0.5, 0, 1, -80),
 		Size = UDim2.new(0.9, 0, 0, 20),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextSize = 15,
@@ -250,12 +279,13 @@ local function buildCenter(parent: Instance)
 		Parent = parent,
 	})
 	refs.hint = text({
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.55, 0),
-		Size = UDim2.new(0, 400, 0, 30),
+		-- just above the beat ring (which sits 190 from the bottom), on any screen height
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -318),
+		Size = UDim2.new(0, 560, 0, 30),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextSize = 20,
-		Text = "Click / tap / Space to clap",
+		Text = "Clap on the beat: click / tap / F when the ring lands",
 		Parent = parent,
 	})
 end
@@ -279,244 +309,204 @@ local function buildToasts(parent: Instance)
 		ZIndex = 50,
 		Parent = parent,
 	})
-	refs.popups = create("Frame", { Name = "Popups", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = parent })
+	-- above panels, so tier-up banners stay visible with the shop open
+	refs.popups = create("Frame", { Name = "Popups", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 10, Parent = parent })
 end
 
 ----------------------------------------------------------------------------------------------------
--- shop
-
-type ShopRow = { frame: Frame, title: TextLabel, detail: TextLabel, buttons: { TextButton } }
-local shopRows: { [string]: ShopRow } = {}
-
-local function shopRow(parent: Instance, key: string, order: number, buyLabels: { string }, onClick: (number) -> ()): ShopRow
-	local frame = create("Frame", {
-		Name = key,
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, 62),
-		BackgroundColor3 = Color3.fromRGB(30, 33, 44),
-		Parent = parent,
-	}, { corner(10) })
-	local title = text({ Position = UDim2.new(0, 12, 0, 8), Size = UDim2.new(1, -150, 0, 22), TextSize = 17, Text = key, Parent = frame })
-	local detail = text({ Position = UDim2.new(0, 12, 0, 32), Size = UDim2.new(1, -150, 0, 20), TextSize = 13, FontFace = SANS_MED, TextTransparency = 0.2, Text = "", Parent = frame })
-	local buttons = {}
-	for i, label in buyLabels do
-		local b = button({
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -10 - (#buyLabels - i) * 46, 0.5, 0),
-			Size = UDim2.new(0, 42, 0, 36),
-			Text = label,
-			TextSize = 14,
-			Parent = frame,
-		})
-		b.Activated:Connect(function()
-			onClick(i)
-		end)
-		table.insert(buttons, b)
-	end
-	local row = { frame = frame, title = title, detail = detail, buttons = buttons }
-	shopRows[key] = row
-	return row
-end
-
-local AMOUNTS = { 1, 10, "max" }
+-- upgrades (the menu itself lives in UpgradesUI)
 
 local function buildShop(parent: Instance)
-	local toggle = button({
-		Name = "ShopToggle",
+	UpgradesUI.init(function(kind, id, amount)
+		handlers.buy(kind, id, amount)
+	end)
+	local toggle = UIKit.dockButton({ name = "UpgradesToggle", text = "Upgrades", icon = Icons.get("ui_upgrade"), color = UIKit.Colors.gold, width = 190, order = 5 })
+	toggle.Activated:Connect(function()
+		shopEverOpened = true
+		UpgradesUI.toggle()
+	end)
+	refs.shopToggle = toggle
+	refs.shopBadge = UIKit.badge(toggle)
+	-- first-time nudge towards the shop
+	refs.shopHint = UIKit.label({
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -22, 1, -22),
-		Size = UDim2.new(0, 150, 0, 48),
-		BackgroundColor3 = Color3.fromRGB(232, 184, 102),
-		TextColor3 = Color3.fromRGB(30, 24, 16),
+		Position = UDim2.new(1, -22, 1, -86),
+		Size = UDim2.new(0, 300, 0, 26),
+		TextXAlignment = Enum.TextXAlignment.Right,
 		TextSize = 20,
-		Text = "Upgrades",
-		Parent = parent,
-	})
-	local panel = create("Frame", {
-		Name = "Shop",
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -22, 1, -80),
-		Size = UDim2.new(0, 400, 0.62, 0),
-		BackgroundColor3 = PANEL,
-		BackgroundTransparency = 0.08,
-		Active = true, -- sink clicks so they don't count as claps
+		TextColor3 = UIKit.Colors.gold,
+		Text = "Spend Applause in Upgrades!",
 		Visible = false,
 		Parent = parent,
-	}, { corner(14), stroke(0.85) })
-	create("UISizeConstraint", { MaxSize = Vector2.new(400, 560), Parent = panel })
-	local scroll = create("ScrollingFrame", {
-		Position = UDim2.new(0, 10, 0, 10),
-		Size = UDim2.new(1, -20, 1, -20),
-		BackgroundTransparency = 1,
-		ScrollBarThickness = 4,
-		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		Parent = panel,
 	})
-	create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
-	toggle.Activated:Connect(function()
-		shopOpen = not shopOpen
-		panel.Visible = shopOpen
-	end)
-	refs.shop = panel
-
-	local function buy(kind: string, id: string?, amount: any)
-		if onBuy then
-			onBuy(kind, id, amount)
-		end
-	end
-
-	text({ LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 22), TextSize = 14, FontFace = SANS_MED, TextTransparency = 0.3, Text = "YOUR CLAP", Parent = scroll })
-	shopRow(scroll, "Strong Hands", 1, { "×1", "×10", "Max" }, function(i)
-		buy("hands", nil, AMOUNTS[i])
-	end)
-	shopRow(scroll, "Technique", 2, { "Buy" }, function()
-		local tech = Formulas.nextTechnique(Store.state :: any)
-		if tech then
-			buy("technique", tech.id, 1)
-		end
-	end)
-	text({ LayoutOrder = 10, Size = UDim2.new(1, 0, 0, 22), TextSize = 14, FontFace = SANS_MED, TextTransparency = 0.3, Text = "CLASSMATES (AUTO-CLAP)", Parent = scroll })
-	for i, def in Config.Classmates do
-		shopRow(scroll, def.id, 10 + i, { "×1", "×10", "Max" }, function(j)
-			buy("classmate", def.id, AMOUNTS[j])
-		end)
-	end
 end
 
 local function refreshShop()
-	if not refs.shop or not refs.shop.Visible then
+	local affordable = UpgradesUI.anyAffordable()
+	shopOpen = UpgradesUI.isOpen()
+	refs.shopBadge.Visible = affordable and not shopOpen
+	refs.shopHint.Visible = affordable and not shopEverOpened
+	UpgradesUI.refresh()
+end
+
+----------------------------------------------------------------------------------------------------
+-- stage travel
+
+type StageCard = { frame: Frame, status: TextLabel, go: TextButton, lock: Frame, lockText: TextLabel }
+local stageCards: { StageCard } = {}
+local stagesModal: UIKit.Modal
+
+local function buildStages(parent: Instance)
+	stagesModal = UIKit.modal({ name = "Stages", title = "Stages", icon = Icons.get("ui_map"), color = UIKit.Colors.blue, size = Vector2.new(820, 520) })
+	UIKit.label({
+		Size = UDim2.new(1, 0, 0, 40),
+		TextSize = 16,
+		TextWrapped = true,
+		Text = "Visit any stage you've reached to show off. Your claps hit at full force there but earn little, and your on-beat claps charge everyone's Encore.",
+		Parent = stagesModal.body,
+	}, 1.5)
+	local holder = UIKit.create("Frame", { Position = UDim2.fromOffset(0, 48), Size = UDim2.new(1, 0, 1, -48), BackgroundTransparency = 1, Parent = stagesModal.body })
+	local grid = UIKit.grid(holder, Vector2.new(178, 206))
+	for _, stage in Config.Stages do
+		if stage.built then
+			local card = UIKit.card({ color = UIKit.StageColors[stage.id] or UIKit.Colors.grey, parent = grid, layoutOrder = stage.id })
+			UIKit.pill(card, tostring(stage.id), UDim2.fromOffset(8, 8))
+			local disc = UIKit.create("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0),
+				Position = UDim2.new(0.5, 0, 0, 10),
+				Size = UDim2.fromOffset(78, 78),
+				BackgroundColor3 = Color3.new(0, 0, 0),
+				BackgroundTransparency = 1,
+				Parent = card,
+			})
+			UIKit.rays(disc, 150)
+			UIKit.image({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(102, 102), Image = Icons.get("stage_" .. stage.key), Parent = disc })
+			local name = UIKit.label({ Position = UDim2.fromOffset(8, 92), Size = UDim2.new(1, -16, 0, 24), Text = stage.name, Parent = card })
+			UIKit.fitText(name, 20)
+			UIKit.label({ Position = UDim2.fromOffset(8, 114), Size = UDim2.new(1, -16, 0, 18), TextSize = 15, TextTransparency = 0.15, Text = stage.jp, Parent = card }, 1.5)
+			local status = UIKit.label({ Position = UDim2.fromOffset(8, 132), Size = UDim2.new(1, -16, 0, 18), TextSize = 15, TextColor3 = UIKit.Colors.money, Text = "", Parent = card }, 1.5)
+			local go = UIKit.button({
+				color = UIKit.Colors.green,
+				text = "Go",
+				textSize = 22,
+				size = UDim2.new(1, -16, 0, 46),
+				position = UDim2.fromOffset(8, 152),
+				parent = card,
+			})
+			go.Activated:Connect(function()
+				handlers.travel(stage.id)
+				stagesModal.close()
+			end)
+			local lock, lockText = UIKit.lockCover(card)
+			table.insert(stageCards, { frame = card, status = status, go = go, lock = lock, lockText = lockText })
+		end
+	end
+	local toggle = UIKit.dockButton({ name = "StagesToggle", text = "Stages", icon = Icons.get("ui_map"), color = UIKit.Colors.blue, width = 160, order = 4 })
+	toggle.Activated:Connect(stagesModal.toggle)
+	refs.stagesToggle = toggle
+end
+
+local function refreshStages()
+	if not stagesModal.isOpen() then
 		return
 	end
 	local s = Store.state
-	local applause = s.applause
-	local function setAffordable(row: ShopRow, cost: number?, locked: boolean)
-		for _, b in row.buttons do
-			local ok = not locked and cost ~= nil and Num.gte(applause, cost)
-			b.BackgroundColor3 = if ok then Color3.fromRGB(232, 184, 102) else Color3.fromRGB(52, 56, 70)
-			b.TextColor3 = if ok then Color3.fromRGB(30, 24, 16) else Color3.fromRGB(150, 150, 160)
-		end
-	end
-
-	local hands = shopRows["Strong Hands"]
-	local handsCost = Formulas.strongHandsCost(s.strongHands)
-	hands.title.Text = string.format("Strong Hands <font transparency=\"0.4\">Lv %d</font>", s.strongHands)
-	hands.detail.Text = string.format("+1 base clap power · 👏 %s", Format.short(handsCost))
-	setAffordable(hands, handsCost, false)
-
-	local techRow = shopRows["Technique"]
-	local tech = Formulas.nextTechnique(s :: any)
-	if tech then
-		local locked = tech.stage > s.stage
-		techRow.title.Text = string.format("%s <font color=\"#E8B866\">×%d</font>", tech.name, tech.mult)
-		techRow.detail.Text = if locked
-			then string.format("Unlocks at stage %d · %s", tech.stage, Config.getStage(tech.stage).name)
-			else string.format("Clap power ×%d · 👏 %s", tech.mult, Format.short(Formulas.techniqueCost(tech)))
-		setAffordable(techRow, Formulas.techniqueCost(tech), locked)
-	else
-		techRow.title.Text = "All techniques learned"
-		techRow.detail.Text = "More in future stages"
-		setAffordable(techRow, nil, true)
-	end
-
-	for _, def in Config.Classmates do
-		local row = shopRows[def.id]
-		local owned = s.classmates[def.id] or 0
-		local locked = def.stage > s.stage
-		row.frame.Visible = def.stage <= s.stage + 1
-		local cost = Formulas.classmateCost(def, owned)
-		row.title.Text = string.format("%s <font transparency=\"0.4\">×%d</font>", def.name, owned)
-		row.detail.Text = if locked
-			then string.format("Unlocks at stage %d", def.stage)
-			else string.format("%s claps/s · 👏 %s", Format.number(def.cps), Format.short(cost))
-		setAffordable(row, cost, locked)
+	local view = s.view or s.stage
+	for i, card in stageCards do
+		local stage = Config.getStage(i)
+		local reached = stage.id <= s.stage
+		local here = stage.id == view
+		card.lock.Visible = not reached
+		card.lockText.Text = "Not reached yet"
+		card.go.Visible = reached and not here
+		UIKit.setButton(card.go, if stage.id == s.stage then UIKit.Colors.gold else UIKit.Colors.green, if stage.id == s.stage then "Return" else "Go")
+		card.status.Text = if here then "You are here!" elseif stage.id == s.stage then "Your stage" elseif reached then "Show off here" else ""
 	end
 end
 
 ----------------------------------------------------------------------------------------------------
--- graduate (prestige)
+-- Curtain Call (prestige) and Rebirth: a button that opens a confirm menu
 
-local function buildGraduate(parent: Instance)
-	local graduate = button({
-		Name = "Graduate",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 186),
-		Size = UDim2.new(0, 220, 0, 46),
-		BackgroundColor3 = Color3.fromRGB(255, 120, 150),
-		TextColor3 = Color3.fromRGB(40, 16, 24),
-		TextSize = 17,
-		Text = "🎓 Graduate 卒業",
-		Visible = false,
-		Parent = parent,
+local function buildPrestige(parent: Instance, key: string, y: number, color: Color3, title: string, iconName: string, confirmText: string, onConfirm: () -> ())
+	local open = UIKit.button({
+		name = key,
+		color = color,
+		text = title,
+		icon = Icons.get(iconName),
+		textSize = 22,
+		size = UDim2.fromOffset(310, 60),
+		anchor = Vector2.new(0.5, 0),
+		position = UDim2.new(0.5, 0, 0, y),
+		parent = parent,
 	})
-	refs.graduate = graduate
-
-	local dialog = create("Frame", {
-		Name = "GraduateDialog",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(0.9, 0, 0, 250),
-		BackgroundColor3 = PANEL,
-		BackgroundTransparency = 0.04,
-		Active = true, -- sink clicks so they don't count as claps
-		Visible = false,
-		ZIndex = 20,
-		Parent = parent,
-	}, { corner(16), stroke(0.8), create("UISizeConstraint", { MaxSize = Vector2.new(420, 250) }) })
-	text({ Position = UDim2.new(0, 22, 0, 18), Size = UDim2.new(1, -44, 0, 34), FontFace = SERIF, TextSize = 28, Text = "Graduate? 卒業", ZIndex = 21, Parent = dialog })
-	refs.graduateBody = text({
-		Position = UDim2.new(0, 22, 0, 60),
-		Size = UDim2.new(1, -44, 0, 110),
-		TextSize = 16,
-		FontFace = SANS_MED,
+	open.Visible = false
+	local modal = UIKit.modal({ name = key .. "Dialog", title = title, icon = Icons.get(iconName), color = color, size = Vector2.new(560, 380) })
+	local body = UIKit.label({
+		Size = UDim2.new(1, 0, 1, -72),
+		TextSize = 19,
 		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
+		LineHeight = 1.1,
 		Text = "",
-		ZIndex = 21,
-		Parent = dialog,
+		Parent = modal.body,
+	}, 2)
+	local confirm = UIKit.button({
+		name = "Confirm",
+		color = color,
+		text = confirmText,
+		textSize = 24,
+		size = UDim2.fromOffset(250, 60),
+		anchor = Vector2.new(1, 1),
+		position = UDim2.fromScale(1, 1),
+		parent = modal.body,
 	})
-	local confirm = button({
-		Name = "Confirm",
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -22, 1, -18),
-		Size = UDim2.new(0, 170, 0, 44),
-		BackgroundColor3 = Color3.fromRGB(255, 120, 150),
-		TextColor3 = Color3.fromRGB(40, 16, 24),
-		TextSize = 18,
-		Text = "Graduate",
-		ZIndex = 21,
-		Parent = dialog,
+	local cancel = UIKit.button({
+		name = "Cancel",
+		color = UIKit.Colors.grey,
+		text = "Not yet",
+		textSize = 22,
+		size = UDim2.fromOffset(170, 60),
+		anchor = Vector2.new(0, 1),
+		position = UDim2.fromScale(0, 1),
+		parent = modal.body,
 	})
-	local cancel = button({
-		Name = "Cancel",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 22, 1, -18),
-		Size = UDim2.new(0, 140, 0, 44),
-		Text = "Not yet",
-		ZIndex = 21,
-		Parent = dialog,
-	})
-	graduate.Activated:Connect(function()
-		dialog.Visible = true
-	end)
-	cancel.Activated:Connect(function()
-		dialog.Visible = false
-	end)
+	open.Activated:Connect(modal.open)
+	cancel.Activated:Connect(modal.close)
 	confirm.Activated:Connect(function()
-		dialog.Visible = false
-		if onGraduate then
-			onGraduate()
-		end
+		modal.close()
+		onConfirm()
 	end)
-	refs.graduateDialog = dialog
+	refs[key] = { button = open, modal = modal, body = body }
+end
+
+----------------------------------------------------------------------------------------------------
+-- walk, and settings: clap power display slider and cosmetics toggle
+
+-- no Walk/Sit button: moving or jumping gets you up, walking into a seat sits you down
+local function buildView(parent: Instance)
+	-- stages 2+: swap between the wide stage camera and the close follow camera
+	local view = UIKit.dockButton({ name = "ViewToggle", text = "Close", icon = Icons.get("ui_camera"), color = UIKit.Colors.teal, width = 130, order = 1 })
+	view.Visible = false
+	view.Activated:Connect(function()
+		handlers.view()
+	end)
+	refs.view = view
+end
+
+-- available: the stage has both cameras; aerial: the wide one is showing (the button offers the other)
+function HUD.setView(available: boolean, aerial: boolean)
+	if refs.view then
+		refs.view.Visible = available
+		UIKit.setButton(refs.view, nil, if aerial then "Close" else "Aerial")
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
 -- public API
 
-function HUD.init(buyHandler: (string, string?, any) -> (), graduateHandler: () -> ())
-	onBuy = buyHandler
-	onGraduate = graduateHandler
+function HUD.init(callbacks: Handlers)
+	handlers = callbacks
 	gui = create("ScreenGui", {
 		Name = "ClapHUD",
 		ResetOnSpawn = false,
@@ -525,32 +515,64 @@ function HUD.init(buyHandler: (string, string?, any) -> (), graduateHandler: () 
 		Parent = player:WaitForChild("PlayerGui"),
 	})
 	local safe = create("Frame", { Name = "Safe", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = gui })
+	-- small screens (phones): lay the HUD out on a bigger virtual screen and scale it down to fit,
+	-- so the beat ring, counters and panels keep their spacing instead of piling up
+	local safeScale = create("UIScale", { Parent = safe })
+	local function fitHud()
+		local camera = workspace.CurrentCamera
+		local viewport = if camera then camera.ViewportSize else Vector2.new(1280, 720)
+		-- (the layout needs about 1000 x 560 to keep the ring clear of the counters and captions)
+		local s = math.clamp(math.min(viewport.X / 1000, viewport.Y / 560), 0.5, 1)
+		safeScale.Scale = s
+		safe.Size = UDim2.fromScale(1 / s, 1 / s)
+	end
+	fitHud()
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitHud)
 	buildPowerBlock(safe)
 	buildTopCenter(safe)
 	buildOvation(safe)
 	buildCenter(safe)
 	buildToasts(safe)
 	buildShop(safe)
-	buildGraduate(safe)
+	buildStages(safe)
+	buildView(safe)
+	buildPrestige(safe, "curtainCall", 186, UIKit.Colors.pink, "Curtain Call", "ui_curtain", "Take a bow", function()
+		handlers.curtainCall()
+	end)
+	buildPrestige(safe, "rebirth", 250, UIKit.Colors.sky, "Rebirth", "ui_rebirth", "Be reborn", function()
+		handlers.rebirth()
+	end)
 
 	-- beat ring animation
 	RunService.RenderStepped:Connect(function()
 		local phase = Beat.phase()
 		local pulse = math.max(0, 1 - phase * 4) -- big right on the beat
-		local size = 64 + 26 * (1 - phase)
+		local toBeat = 1 - phase -- 1 just after a beat, 0 on the next one
+		local size = 64 + 86 * toBeat
 		refs.beatRing.Size = UDim2.fromOffset(size, size)
-		local ringStroke = refs.beatRing:FindFirstChildOfClass("UIStroke")
-		if ringStroke then
-			ringStroke.Transparency = 0.15 + 0.7 * phase
-		end
+		local ringStroke = refs.beatRing:FindFirstChildOfClass("UIStroke") :: UIStroke
+		ringStroke.Transparency = 0.1 + 0.8 * toBeat
+		local offset = math.min(phase, 1 - phase) * T.BeatInterval
+		local inWindow = offset <= T.GoodWindow
+		local targetStroke = refs.beatTarget:FindFirstChildOfClass("UIStroke") :: UIStroke
+		targetStroke.Color = if offset <= T.PerfectWindow then GOLD elseif inWindow then WHITE else Color3.fromRGB(150, 150, 160)
+		targetStroke.Transparency = if inWindow then 0.05 else 0.55
 		refs.beatDot.BackgroundTransparency = 0.6 - 0.5 * pulse
 		refs.beatDot.Size = UDim2.fromOffset(16 + 10 * pulse, 16 + 10 * pulse)
+		-- the badge pulses on the beat when something is affordable
+		if refs.shopBadge.Visible then
+			refs.shopBadge.Size = UDim2.fromOffset(26 + 6 * pulse, 26 + 6 * pulse)
+		end
 		HUD.updateOvation()
 	end)
 end
 
 function HUD.setPredictedClaps(n: number)
 	predictedClaps = n
+end
+
+function HUD.setStreak(n: number)
+	streak = n
 end
 
 local function captionFor(stageId: number, t: number): Config.Caption?
@@ -591,6 +613,7 @@ function HUD.update(t: number, stageId: number)
 	refs.pill.Text = string.format("STAGE %d · %s  %s", stage.id, string.upper(stage.name), stage.jp)
 
 	local d = stage.display
+	local isVisiting = stageId < s.stage
 	local value = Formulas.displayValue(stage.id, t)
 	local valueText: string
 	if d.suffix == " dB" then
@@ -600,64 +623,93 @@ function HUD.update(t: number, stageId: number)
 	else
 		valueText = Format.number(value) .. d.suffix
 	end
+	if isVisiting then
+		valueText ..= " MAX"
+	end
 	refs.value.Text = string.format("%s <font face=\"Merriweather\" size=\"36\" color=\"#E8B866\">%s</font>", d.label, valueText)
 
 	refs.meterFill.Size = UDim2.new(t, 0, 1, 0)
-	refs.meterTicks.Visible = d.meter == true
-	if d.meter then
-		refs.meterLabel.Text = ""
+	local tier = if stageId == s.stage then (s.tier or 0) else #stage.tiers
+	refreshTicks(stageId, tier)
+	local nextTier = stage.tiers[tier + 1]
+	local function unitText(value: number): string
+		if d.suffix == " dB" then
+			return string.format("%d dB", math.floor(value))
+		elseif d.suffix == "×" then
+			return Format.number(value) .. "×"
+		end
+		return Format.number(value) .. d.suffix
+	end
+	if isVisiting then
+		refs.meterLabel.Text = string.format("⭐ Visiting · your best is Stage %d · earnings reduced here", s.stage)
+	elseif nextTier then
+		refs.meterLabel.Text = string.format(
+			"Tier %d/%d · next: <b>%s</b> at %s",
+			tier,
+			#stage.tiers,
+			nextTier.name,
+			unitText(Formulas.displayValue(stage.id, nextTier.at))
+		)
 	elseif capped then
 		refs.meterLabel.Text = "Final stage for now · more coming soon"
 	else
-		local nextStage = Config.getStage(stage.id + 1)
-		refs.meterLabel.Text = string.format("Next: %s · %d%%", nextStage.name, math.floor(t * 100))
+		refs.meterLabel.Text = string.format("Next: <b>BREAKTHROUGH</b> at %s", unitText(Formulas.displayValue(stage.id, 1)))
 	end
 
-	refs.applause.Text = "👏 " .. Format.short(s.applause)
+	refs.applause.Text = Format.short(s.applause)
 	local auto = Formulas.autoClapsPerSecond(s :: any)
 	local rate = if auto > 0
 		then string.format("Classmates: +%s/s · Power %s", Format.short(s.clapPower + math.log10(auto * T.AutoEfficiency)), Format.short(s.clapPower))
 		else string.format("Clap power %s", Format.short(s.clapPower))
-	local diplomas = s.diplomas or 0
-	if diplomas > 0 then
-		rate ..= string.format(" · 🎓 %d (+%d%%)", diplomas, math.floor(diplomas * T.DiplomaBonus * 100 + 0.5))
+	local bouquets = s.bouquets or 0
+	if bouquets > 0 then
+		rate ..= string.format(" · Bouquets %s (×%s)", Format.number(bouquets), Format.number(Formulas.bouquetMultiplier(bouquets)))
+	end
+	local rebirths = s.rebirths or 0
+	if rebirths > 0 then
+		rate ..= string.format(" · Rebirth %d", rebirths)
 	end
 	refs.rate.Text = rate
 
-	local canGraduate = s.canGraduate == true and stageId == s.stage
-	refs.graduate.Visible = canGraduate
-	if canGraduate then
-		local gained = s.diplomasOnGraduate or 0
-		local after = (diplomas + gained) * T.DiplomaBonus * 100
-		refs.graduate.Text = string.format("🎓 Graduate 卒業  +%d", gained)
-		refs.graduateBody.Text = string.format(
-			"Start over from the ceremony with <font color=\"#E8B866\">+%d Diplomas</font>.\n\nYou'll have %d Diplomas: <b>+%d%% clap power forever</b>.\nApplause, upgrades and classmates reset. Keep clapping longer before graduating to earn more.",
-			gained,
-			diplomas + gained,
-			math.floor(after + 0.5)
+	-- Curtain Call: from the City onwards, any time you're in your own stage
+	local call = refs.curtainCall
+	local canCall = s.canCurtainCall == true and stageId == s.stage
+	call.button.Visible = canCall
+	if canCall then
+		local gained = s.bouquetsOnCall or 0
+		UIKit.setButton(call.button, nil, string.format("Curtain Call  +%s Bouquets", Format.number(gained)))
+		call.body.Text = string.format(
+			"Take a bow and start the show again from the ceremony with <font color=\"#E8B866\">+%s Bouquets</font>.\n\nBouquets: %s → %s, clap power <b>×%s</b> (until you Rebirth).\nApplause, upgrades, classmates and stages reset. The further you get before your Curtain Call, the more Bouquets you're thrown.",
+			Format.number(gained),
+			Format.number(bouquets),
+			Format.number(bouquets + gained),
+			Format.number(Formulas.bouquetMultiplier(bouquets + gained))
 		)
-	elseif refs.graduateDialog.Visible then
-		refs.graduateDialog.Visible = false
+	elseif call.modal.isOpen() then
+		call.modal.close()
 	end
 
-	local combo = s.combo or 1
-	refs.combo.Text = if combo > 1.05 then string.format("×%.1f COMBO", combo) else ""
-
-	local chain = s.frenzyChain or 0
-	if chain > 0 then
-		refs.encoreFill.Size = UDim2.new(chain / T.FrenzyChain, 0, 1, 0)
-		refs.encoreLabel.Text = string.format("ENCORE! next clap ×%d", Formulas.frenzyMultiplier(T.FrenzyChain - chain + 1))
-		refs.encoreLabel.TextColor3 = Color3.fromRGB(255, 150, 175)
-	else
-		refs.encoreFill.Size = UDim2.new(math.clamp(s.frenzy / T.FrenzyClapsToFill, 0, 1), 0, 1, 0)
-		refs.encoreLabel.Text = "ENCORE"
-		refs.encoreLabel.TextColor3 = WHITE
+	-- Rebirth: once Space's escape velocity is full
+	local reborn = refs.rebirth
+	reborn.button.Visible = s.canRebirth == true
+	if s.canRebirth then
+		UIKit.setButton(reborn.button, nil, string.format("Rebirth %d", rebirths + 1))
+		reborn.body.Text = string.format(
+			"Start everything again, Bouquets included, as Rebirth %d:\n\n• clap power <b>×%d</b> forever (×%s total)\n• Bouquets <b>×%d</b> from every Curtain Call\n• %s\n\nYour Rebirths count on the leaderboards.",
+			rebirths + 1,
+			T.RebirthPowerMultiplier,
+			Format.number(T.RebirthPowerMultiplier ^ (rebirths + 1)),
+			T.RebirthBouquetMultiplier ^ (rebirths + 1),
+			if rebirths == 0 then "angel wings" elseif rebirths == 1 then "a glowing halo" else "a brighter clap trail"
+		)
+	elseif reborn.modal.isOpen() then
+		reborn.modal.close()
 	end
 
 	if captionLocked then
 		-- a cinematic owns the caption
-	elseif canGraduate then
-		HUD.setCaption("You've outgrown this school. Time to graduate.", "卒業おめでとう")
+	elseif s.canRebirth and stageId == s.stage then
+		HUD.setCaption("You've beaten Space. Time to be reborn.", "転生")
 	elseif capped and t >= 1 then
 		HUD.setCaption("This is as far as the stage goes (for now). Keep clapping!")
 	else
@@ -670,6 +722,7 @@ function HUD.update(t: number, stageId: number)
 	end
 	refs.hint.Visible = claps == 0
 	refreshShop()
+	refreshStages()
 end
 
 function HUD.updateOvation()
@@ -714,14 +767,87 @@ function HUD.whiteOut(duration: number)
 	TweenService:Create(refs.flash, TweenInfo.new(duration), { BackgroundTransparency = 0 }):Play()
 end
 
-function HUD.perfect()
-	refs.perfect.TextTransparency = 0
-	refs.perfect.Position = UDim2.new(0.5, 0, 0, 4)
-	TweenService:Create(refs.perfect, TweenInfo.new(0.45), { TextTransparency = 1, Position = UDim2.new(0.5, 0, 0, -10) }):Play()
+local GRADE_STYLE: { [string]: { text: string, color: Color3 } } = {
+	Perfect = { text = "PERFECT", color = GOLD },
+	Great = { text = "GREAT", color = Color3.fromRGB(150, 210, 255) },
+	Good = { text = "GOOD", color = WHITE },
+	Miss = { text = "MISS", color = Color3.fromRGB(255, 95, 95) },
+}
+
+-- grade text over the beat ring + floating amount (gained, or lost on a Miss)
+function HUD.grade(grade: string, amountLog: number, combo: number, streakNow: number?)
+	local style = GRADE_STYLE[grade]
+	refs.gradeLabel.Text = style.text
+	refs.gradeLabel.TextColor3 = style.color
+	refs.gradeLabel.TextTransparency = 0
+	refs.gradeLabel.Position = UDim2.new(0.5, 0, 0, 4)
+	local scale = refs.gradeLabel:FindFirstChildOfClass("UIScale") or create("UIScale", { Parent = refs.gradeLabel })
+	scale.Scale = if grade == "Perfect" then 1.35 else 1.1
+	TweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+	TweenService:Create(refs.gradeLabel, TweenInfo.new(0.5), { TextTransparency = 1, Position = UDim2.new(0.5, 0, 0, -12) }):Play()
+	if grade == "Miss" then
+		HUD.popup(amountLog, style.color, "−")
+	else
+		HUD.popup(amountLog, if grade == "Perfect" then GOLD else WHITE, "+")
+	end
+	if streakNow and streakNow > 0 and streakNow % 10 == 0 then
+		HUD.toast(string.format("%d beat streak! ×%.1f combo", streakNow, combo), GOLD, 1.2)
+	end
+end
+
+-- big centre banner for a tier-up: "TIER 2 · PAINFUL" + bonus
+function HUD.tierUp(tier: number, count: number, name: string, jp: string?, bonusLog: number)
+	local holder = create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.42),
+		Size = UDim2.fromOffset(520, 120),
+		BackgroundTransparency = 1,
+		Parent = refs.popups,
+	})
+	local small = text({
+		Size = UDim2.new(1, 0, 0, 24),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextSize = 18,
+		TextColor3 = GOLD,
+		Text = string.format("TIER %d / %d", tier, count),
+		Parent = holder,
+	})
+	local big = text({
+		Position = UDim2.new(0, 0, 0, 22),
+		Size = UDim2.new(1, 0, 0, 56),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		FontFace = SERIF,
+		TextSize = 48,
+		Text = string.upper(name),
+		Parent = holder,
+	})
+	local sub = text({
+		Position = UDim2.new(0, 0, 0, 80),
+		Size = UDim2.new(1, 0, 0, 24),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextSize = 18,
+		FontFace = SANS_MED,
+		Text = string.format("%s  +%s Applause", jp or "", Format.short(bonusLog)),
+		Parent = holder,
+	})
+	local scale = create("UIScale", { Scale = 0.6, Parent = holder })
+	TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+	task.delay(1.8, function()
+		local fade = TweenInfo.new(0.5)
+		for _, label in { small, big, sub } do
+			TweenService:Create(label, fade, { TextTransparency = 1 }):Play()
+		end
+		task.wait(0.55)
+		holder:Destroy()
+	end)
 end
 
 -- first-person shockwave: a ring bursting out from between the hands
-function HUD.screenRing(perfect: boolean, t: number)
+function HUD.screenRing(grade: string, t: number)
+	if grade == "Miss" then
+		return
+	end
+	local perfect = grade == "Perfect"
 	local ring = create("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.72),
@@ -743,16 +869,16 @@ function HUD.screenRing(perfect: boolean, t: number)
 end
 
 -- floating "+1.2K" near the centre
-function HUD.popup(amountLog: number, gold: boolean)
+function HUD.popup(amountLog: number, color: Color3, sign: string)
 	local label = text({
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.new(0.5 + (math.random() - 0.5) * 0.18, 0, 0.44 + (math.random() - 0.5) * 0.06, 0),
 		Size = UDim2.new(0, 200, 0, 30),
 		TextXAlignment = Enum.TextXAlignment.Center,
-		TextSize = if gold then 26 else 20,
+		TextSize = if color == GOLD then 26 else 20,
 		FontFace = SERIF,
-		TextColor3 = if gold then GOLD else WHITE,
-		Text = "+" .. Format.short(amountLog),
+		TextColor3 = color,
+		Text = sign .. Format.short(amountLog),
 		Parent = refs.popups,
 	})
 	local target = label.Position - UDim2.new(0, 0, 0.06, 0)

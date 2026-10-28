@@ -61,6 +61,7 @@ function WorldService.place(player: Player, stageId: number)
 	release(player)
 	local spot = claimSpot(player, stageId)
 	player:SetAttribute("Stage", stageId)
+	player:SetAttribute("Walking", false)
 	if not spot then
 		return
 	end
@@ -92,8 +93,56 @@ function WorldService.place(player: Player, stageId: number)
 	end
 end
 
+-- get up from your seat/spot and walk around the stage
+function WorldService.walk(player: Player)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not (character and humanoid and root) then
+		return
+	end
+	release(player)
+	local seat = humanoid.SeatPart
+	if seat then
+		local weld = seat:FindFirstChild("SeatWeld")
+		if weld then
+			weld:Destroy()
+		end
+		humanoid.Sit = false
+		if seat:IsA("Seat") then
+			-- don't drop straight back into the seat you just got up from
+			seat.Disabled = true
+			task.delay(1.5, function()
+				seat.Disabled = false
+			end)
+		end
+	end
+	root.Anchored = false
+	humanoid.WalkSpeed = 16
+	humanoid.JumpPower = 45
+	character:PivotTo(root.CFrame + Vector3.new(0, 2, 0))
+	player:SetAttribute("Walking", true)
+end
+
+-- walked into one of the stage's seats: that's your seat now (first-person view in the hall)
+local function sitAt(player: Player, humanoid: Humanoid, seat: Seat)
+	release(player)
+	occupied[seat] = player
+	playerSpot[player] = seat
+	humanoid.WalkSpeed = 0
+	humanoid.JumpPower = 0
+	player:SetAttribute("Walking", false)
+end
+
 function WorldService.init(getStage: (Player) -> number)
 	local function onCharacter(player: Player, character: Model)
+		local humanoid = character:WaitForChild("Humanoid") :: Humanoid
+		humanoid.Seated:Connect(function(active, seat)
+			local stages = workspace:FindFirstChild("Stages")
+			if active and seat and seat:IsA("Seat") and stages and seat:IsDescendantOf(stages) and player:GetAttribute("Walking") then
+				sitAt(player, humanoid, seat)
+			end
+		end)
 		character:WaitForChild("HumanoidRootPart")
 		while not player:GetAttribute("Loaded") and player.Parent do
 			task.wait(0.1)

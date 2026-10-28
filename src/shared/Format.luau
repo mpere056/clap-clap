@@ -26,6 +26,9 @@ function Format.short(l: number): string
 	if Num.isZero(l) then
 		return "0"
 	end
+	if l < 0 then
+		return (string.format("%.2g", 10 ^ l))
+	end
 	if l < 3 then
 		local n = 10 ^ l
 		if n < 10 then
