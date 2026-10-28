@@ -67,11 +67,45 @@ Goal: feel like the source video (soft, clean, deadpan "what-if" explainer) whil
 
 **Juice on every clap:**
 - Hands snap animation (≈120 ms), screen punch (FOV −2 → back), tiny camera shake scaled to stage.
+- Avatars clap too, whenever we see them (walking, standing on later stages, other players): arms
+  rise to chest height, the hands snap together on each clap and spring apart, stay up between
+  claps and drop after about a second. It layers over the walk animation and works on every rig.
+- A comic "pop" where the hands meet (white disc in a burst of rays, gold on Perfect) with sparks.
+- Everything else scales with clap force, from nothing on the first claps up to a stage-wrecking
+  visitor; see the ladder in [10-multiplayer-effects.md](10-multiplayer-effects.md).
 - Shockwave ring decal/particle from the hands.
 - Floating `+1.2K` pop (gold on crit).
 - On-beat clap: ring flashes white, combo counter ticks up.
 
 **Mobile:** tap anywhere (outside buttons) to clap. Buttons ≥ 44 px, bottom tabs in the thumb zone. Respect safe areas / notches.
+On short screens the whole HUD is laid out on a virtual 1000 × 560 screen and scaled down (about
+70% on a phone in landscape), so nothing overlaps. The event banner scales the same way, the dock
+shrinks to at least 70%, and menus use nearly the full height (over the dock) so their cards stay
+readable.
+
+**Menus (2026-10-27):** two looks on purpose. The in-play HUD (clap count, meter, captions)
+keeps the video's quiet serif style; the menus use the chunky simulator style players know from
+the top Roblox simulators. That style is built from `src/client/UIKit.luau`:
+- Fredoka One text with thick black outlines; buttons with a darker 3D bottom edge that press down.
+- Menus open centred with a striped colour header, a big title with an emoji and a red **X**.
+  Only one menu is open at a time; they shrink to fit phones.
+- Icons are the game's own art, not emoji: ~70 custom icons (every technique, classmate,
+  stage, event item, currency and dock button), each a small 3D toy-like model rendered in
+  Blender: rounded glossy plastic shapes, bright saturated colours, three-point lighting, dark inner
+  outlines, one thick outline around the whole silhouette and a drop shadow, like the item art of
+  popular simulators. In cards they sit on slowly turning light rays (`ui_rays`). They're modelled
+  in `tools/icons3d.py` (contact sheet `art/icons/sheet.png`) and uploaded as Roblox images; menus
+  use them through `src/shared/Icons.luau`. Emoji only remain in chat-style toasts.
+- Items are cards: the icon on a dark disc, a level pill (top left), a stage pill (top
+  right), the name, a green stat line, the cost, and buy buttons (+1 / +10 / MAX). Locked cards
+  get a 🔒 cover saying what unlocks them.
+- Card colour = the stage the item belongs to, read like rarities: grey, green, blue, purple,
+  orange, red, teal, magma, cosmic.
+- The bottom-right dock: View (teal, stages 2–6: Aerial ↔ Close camera), 🏆 (purple), ⚙ (teal),
+  Stages (blue), Upgrades (gold). There's no Walk/Sit button: moving or jumping while seated gets
+  you up, and walking into a seat sits you down. Clap keys: click / tap / F (Space jumps).
+  A red "!" badge pulses on the beat when an upgrade is affordable.
+- Plain lists are fine where a list reads better (leaderboards).
 
 ## Audio
 

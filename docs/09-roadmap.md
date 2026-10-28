@@ -15,6 +15,10 @@
 Built and tested in Studio: all items below except saving (needs the place published) and a real multi-client test of Ovation / In Sync (code paths smoke-tested solo).
 Known rough edges: blocky placeholder hands, Creator Store placeholder audio, no shopping-arcade cut, no "street cut".
 
+**Phase 2 progress (2026-10-27):** all 9 stages built (City, Region, Country, Planet, Molten Earth, Space with the silence beat), rhythm grading with miss penalties, per-clap effects by grade, stage travel/show-off for stronger players, Graduate moved to the end of the run (reaching Space), economy recalibrated (~55 min to Space).
+
+**More systems (2026-10-27):** Curtain Call prestige from the City, Space escape velocity + Rebirth with wings/halo/trail, clap-power display setting, world/server leaderboards with crowns and auras, walking (stages 1–6) with clapping on the move, rewarded video ads (needs a developer product id).
+
 **Launch must-fixes (2026-10-27):** streaming turned off; session-locked saving; Graduate (prestige) available at the end of stage 3 for now (`Tuning.GraduateStage`, move to 9 when later stages exist). Still needed: publish + Max Players 20 + Studio API access, a 2-player test, the Maturity & Compliance questionnaire and store page.
 
 **Goal:** someone plays for 10–15 minutes and wants to keep clapping.

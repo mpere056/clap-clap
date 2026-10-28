@@ -42,7 +42,12 @@ Reference points: 1 kg TNT ≈ 4.2 MJ. Largest human explosion ever ≈ 50 Mt. C
 - **Setting:** Aerial view of a small town: school in the middle, houses on a grid, a covered shopping arcade (shōtengai).
 - **Camera:** High aerial, slight tilt. Optional quick street-level cut of the arcade with townsfolk tumbling past (comedic, no injuries).
 - **Display:** tons TNT, 1 t → 1,000 t.
-- **Reactions:** a ring of debris expands from the school; roofs peel; cars hop.
+- **Reactions (built 2026-10-27, `build/stage3_town.luau`):** about 550 houses with pitched roofs,
+  chimneys and cars around the school. The ~330 studs nearest the school also get windows, doors,
+  fences, mailboxes, bins and street lamps. Every clap shoves them by strength at that spot,
+  weakest first: balls, bins, mailboxes, fences, glass, lamps and trees (bend), cars, chimneys,
+  doors, roof slabs, then the school roofs; whole houses jump only for very strong visitors.
+  Everything heals. The only lasting damage is the sports field cracking as your progress grows.
 - **Breakthrough → 4:** a crater ring blooms outward; camera pulls up to satellite height.
 
 ## Stage 4 — The City 市

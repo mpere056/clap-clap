@@ -13,6 +13,7 @@ return {
 	BoomBig = "rbxassetid://9117876706",
 	Breakthrough = "rbxassetid://9126102254",
 	Glass = "rbxassetid://139826391278483",
+	Tick = "rbxassetid://9114213410",
 	Crowd = "rbxassetid://9112823809",
 	Music = "rbxassetid://140492661889585",
 }

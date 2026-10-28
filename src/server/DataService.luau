@@ -72,6 +72,12 @@ function DataService.init()
 		warn("[DataService] Place is unpublished - using in-memory data (progress won't save).")
 		return
 	end
+	-- Studio test from a brand-new save without touching the real one:
+	-- ServerStorage:SetAttribute("DevFreshSave", true) in edit mode before pressing Play
+	if game:GetService("RunService"):IsStudio() and game:GetService("ServerStorage"):GetAttribute("DevFreshSave") == true then
+		warn("[DataService] DevFreshSave is on - starting from a new in-memory save (nothing is saved).")
+		return
+	end
 	local ok, err = pcall(function()
 		store = DataStoreService:GetDataStore(STORE_NAME)
 		-- probe once so a missing Studio API permission falls back cleanly instead of kicking players

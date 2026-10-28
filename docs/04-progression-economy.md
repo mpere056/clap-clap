@@ -2,6 +2,48 @@
 
 > Numbers here are **starting points for tuning**, not final. Once the mode is decided, we'll build a pacing simulator (a small script that simulates a player clicking and buying optimally) to tune them.
 
+## Curtain Call, Space and Rebirth (implemented 2026-10-27)
+
+- **Curtain Call 🎭** (replaces "Graduate"): available any time from the City (after breaking through stage 3), as often as you like. Bouquets 💐 = 5 × 10^(0.18 × (best power − 9)) × 2^rebirths; each Bouquet is +10% clap power until the next Rebirth.
+- **Pacing** (`python tools/pacing_sim.py`): stages 1–3 ≈ 10 min; Space after ≈ 4.8 h with no Curtain Calls; ≈ 62 min with optimal Curtain Calls (≈ 17 calls, calling whenever the multiplier would grow ×1.5).
+- **Beating Space:** the escape-velocity meter fills by grade × combo per on-beat clap in Space (goal 30,000 ≈ 58 min of good clapping). It survives Curtain Calls.
+- **Rebirth 🕊:** resets everything including Bouquets; permanent ×10 clap power and ×2 Bouquets per Rebirth. Cosmetics: wings (1), halo (2), clap trail (3). Settings: "clap power shown" slider (10–100%, visual only) and a cosmetics/titles toggle.
+
+## Leaderboards (implemented 2026-10-27)
+
+Score = Rebirths × 1000 + best clap power ever (log10). World top 100 via an OrderedDataStore (refreshed every minute); server ranks every 10 s.
+
+| Rank | Reward |
+|---|---|
+| World #1 / #2 / #3 | gold / silver / bronze crown, big aura (rainbow for #1), announced when they join |
+| World 4–5 / 6–10 | purple / blue aura + title |
+| World 11–25 / 26–50 / 51–100 | sparkles / title / title |
+| Server #1–5 | 🥇🥈🥉 / "SERVER #n" title, small sparkle for #1 |
+
+Also: 🏆 panel (World top 100 / This server), a World top 10 board in the hall, and Rebirths / Stage / Power columns in the player list.
+
+## Rhythm (implemented 2026-10-27)
+
+Every clap is graded by its distance from the nearest beat (100 BPM, one beat every 0.6 s). The server grades the clap's own timestamp, so the result can't be faked.
+
+| Distance from beat | Grade | Effect |
+|---|---|---|
+| ≤ 0.06 s | Perfect | ×3 Applause, builds streak |
+| ≤ 0.12 s | Great | ×2, builds streak |
+| ≤ 0.20 s | Good | ×1, builds streak |
+| further, or a 2nd clap in the same beat | Miss | lose 2 claps' worth of Applause, streak resets |
+
+- Combo = 1 + 2 × min(streak, 20) / 20 (×3 at a 20-beat streak); skipping up to 2 beats keeps the streak.
+- Practice (+1 base power per 10 claps), Encore (150 claps → 6 doubling claps) and the Standing Ovation only count on-beat claps. Spamming loses Applause.
+- HUD: a ring shrinks onto a target that lights up inside the hit window; a soft metronome tick plays every beat.
+
+## Visiting earlier stages (implemented 2026-10-27)
+
+- 🗺 Stages lets you return to any stage up to your current one.
+- While visiting, manual clap power is capped at that stage's breakthrough power, then divided by 10 for each stage back (`VisitorGainPerStageBack`), so visiting is for showing off, not farming; classmates still earn at full power.
+- Visitors' claps look much bigger to others (gold double rings, sparks) and they get a "⭐ STAGE N CLAPPER" title.
+- Each on-beat clap from a visitor adds (stages ahead) × 1 to the Encore meter of every other player in that stage, and counts ×3 towards the Standing Ovation.
+
 ## Currencies
 
 | Currency | Earned by | Spent on | Resets on Graduate? |
@@ -34,6 +76,20 @@ Auto-clappers earn `CP × AutoEfficiency` per auto-clap, with no combo. That mak
 A stage is cleared when **one clap's effective power** (`CP × Combo`) ≥ the stage threshold. The clap that crosses it *is* the Breakthrough clap, just like "clap #29 = one bomb" in the video. Encore Frenzy only multiplies Applause, not breakthrough power: its ×256 would otherwise skip whole stages.
 
 > Implemented values (src/shared/Config.luau) were calibrated with `tools/pacing_sim.py` and differ from the illustrative tables below: techniques in stages 2–3 are ×10 each, Strong Hands has no ×2 milestones, Encore is 8 doublings per 400 claps.
+
+### Current pacing (all 9 stages, `python tools/pacing_sim.py`)
+
+Engaged rhythm player: stage 1 ≈ 1.6 min, then +3.6, +5.8, +7.3, +7.9, +9.1, +9.5, +10.6 → Space at ≈ 55 min. A sloppier player (70% hits) reaches Space at ≈ 63 min. Graduate unlocks on reaching Space; Diplomas = 10 × (power above the stage 8 threshold + 1)^1.5.
+
+### Early-game feedback (2026-10-27, after first playtest)
+
+Playtest finding: clapping without buying upgrades never moved the meter, and the first breakthrough felt far away. Changes:
+
+- **Practice:** every 25 claps in a run adds +1 base clap power, so clapping alone visibly raises the dB meter (≈151 dB after 2 min with no purchases).
+- **Tiers:** each stage has 4–5 named milestones (stage 1: Loud 120 dB → Painful → Deafening → Window-rattling → Glass-breaking 180 dB). Each tier-up shows a banner, plays a sting, sends a wave through the room and pays `CP × 40 × tier` Applause.
+- **Faster start, longer later stages:** Strong Hands from 8 Applause, cheaper first techniques/classmates. Simulated at 6 clicks/s: stage 1 ≈ 0.8 min, stage 2 +1.9 min, stage 3 +3.6 min (3 clicks/s: 1.3 / +2.3 / +3.8).
+- **Shop discoverability:** the Upgrades button glows with a badge when anything is affordable, plus a one-time "Spend Applause in Upgrades ➜" tip.
+- Meter progress follows the run's best power, so it never slides back when the combo decays.
 
 Internal thresholds (log₁₀ of CP):
 
